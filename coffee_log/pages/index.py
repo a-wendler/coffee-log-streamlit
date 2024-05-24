@@ -2,9 +2,9 @@
 import reflex as rx
 from sqlalchemy import select
 from datetime import datetime
-from reflex_test import styles
-from reflex_test.templates import template
-from reflex_test.models.models import *
+from coffee_log import styles
+from coffee_log.templates import template
+from coffee_log.models.models import *
 
 class CoffeeFormState(rx.State):
     anzahl = 1

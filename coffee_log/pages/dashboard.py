@@ -1,8 +1,8 @@
 """The dashboard page."""
 import reflex as rx
 from sqlalchemy import select
-from reflex_test.templates import template
-from reflex_test.models.models import *
+from coffee_log.templates import template
+from coffee_log.models.models import *
 
 class DashboardFormState(rx.State):
     form_data: dict = {}

@@ -1,6 +1,6 @@
 """The settings page."""
 
-from reflex_test.templates import ThemeState, template
+from coffee_log.templates import ThemeState, template
 
 import reflex as rx
 

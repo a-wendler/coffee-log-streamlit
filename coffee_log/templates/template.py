@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from reflex_test import styles
-from reflex_test.components.sidebar import sidebar
+from coffee_log import styles
+from coffee_log.components.sidebar import sidebar
 from typing import Callable
 
 import reflex as rx

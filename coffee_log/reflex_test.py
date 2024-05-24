@@ -1,8 +1,8 @@
 """Welcome to Reflex!."""
 
 # Import all the pages.
-from reflex_test.pages import *
-from reflex_test.models import models
+from coffee_log.pages import *
+from coffee_log.models import models
 
 import reflex as rx
 

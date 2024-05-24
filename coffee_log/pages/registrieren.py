@@ -1,5 +1,5 @@
-from reflex_test.templates import ThemeState, template
-from reflex_test.models.models import *
+from coffee_log.templates import ThemeState, template
+from coffee_log.models.models import *
 import reflex as rx
 from datetime import datetime
 

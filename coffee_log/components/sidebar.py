@@ -1,6 +1,6 @@
 """Sidebar component for the app."""
 
-from reflex_test import styles
+from coffee_log import styles
 
 import reflex as rx
 
