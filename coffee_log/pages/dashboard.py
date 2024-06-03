@@ -2,22 +2,22 @@
 import reflex as rx
 from sqlalchemy import select
 from coffee_log.templates import template
-from coffee_log.models.models import *
+from coffee_log.models.models import User, CoffeeLog
 
-class DashboardFormState(rx.State):
-    form_data: dict = {}
-    user = ''
+class UserTable(rx.State):
+    users:list = []
 
-    def handle_submit(self, form_data: dict):
-        self.form_data = form_data
-        
-        
-        with rx.session() as session:            
-            user = session.exec(
-                select(User).where(User.code == self.form_data['code'])
-            ).scalar_one_or_none()
-            session.commit()
-            self.user = user.id
+    def load_data(self):
+        with rx.session() as session:
+            result = session.exec(select(User.name, User.admin, User.mitglied)).all()
+            for row in result:
+                self.users.append([row.name, bool(row.admin), bool(row.mitglied)])
+
+    def get_edited_data(self, pos, val) -> str:
+        col, row = pos
+        self.users[row][col] = val["data"]
+
+    # def update_user(self, user):
 
 
 @template(route="/dashboard", title="Dashboard")
@@ -29,20 +29,17 @@ def dashboard() -> rx.Component:
     """
     return rx.vstack(
         rx.heading("Dashboard", size="8"),
-        rx.text("Welcome to Reflex!"),
-        rx.text(
-            "You can edit this page in ",
-            rx.code("{your_app}/pages/dashboard.py"),
+        rx.data_editor(
+            data=UserTable.users,
+            columns=[
+                {"title":"Name", "type":"str"},
+                {"title":"Admin", "type":"bool"},
+                {"title":"Mitglied", "type":"bool"},
+            ],
+            pagination=True,
+            search=True,
+            sort=True,
+            on_cell_edited=UserTable.get_edited_data,
         ),
-        rx.form(
-            rx.vstack(
-                rx.input(
-                    name='code',
-                    placeholder='Ihr Kennwort',
-                ),
-                rx.button(f'Kaffee eintragen', type='submit'),
-            ),
-            on_submit=DashboardFormState.handle_submit,
-        ),
-        rx.text(DashboardFormState.user)
+        on_mount=UserTable.load_data,
     )
