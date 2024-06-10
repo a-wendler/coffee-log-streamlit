@@ -1,6 +1,6 @@
 """Models"""
 from __future__ import annotations
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 from sqlalchemy import Integer, String, Float, ForeignKey
@@ -26,7 +26,7 @@ class Payment(Base):
     __tablename__ = "payments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     betrag: Mapped[float] = mapped_column(Float, nullable=False)
-    betreff: Mapped[str] = mapped_column(String)
+    betreff: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     ts: Mapped[datetime] = mapped_column(String, nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="payments")
@@ -42,8 +42,8 @@ class User(Base):
     code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     admin: Mapped[int] = mapped_column(Integer, default=0)
     mitglied: Mapped[int] = mapped_column(Integer, default=0)
-    token: Mapped[str] = mapped_column(String)
-    status: Mapped[str] = mapped_column(String)
+    token: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="new")
     ts: Mapped[datetime] = mapped_column(String, nullable=False)
     logs: Mapped[List[Log]] = relationship(back_populates="user")
     payments: Mapped[List[Payment]] = relationship(back_populates="user")

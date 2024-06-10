@@ -23,9 +23,6 @@ def authenticated_menu():
             "pages/abrechnung.py",
             label="Abrechnung",
         )
-        setup = st.sidebar.button("Datenbank initialisieren")
-        if setup:
-            setup_db()
     st.sidebar.divider()
     st.sidebar.write("Eingeloggt als:")
     st.sidebar.write(st.session_state.current_user['vorname'], ' ', st.session_state.current_user['name'])
@@ -40,6 +37,9 @@ def unauthenticated_menu():
     st.sidebar.page_link("pages/register.py", label="Registrieren")
     st.sidebar.divider()
     st.sidebar.write("Nicht eingeloggt")
+    setup = st.sidebar.button("Datenbank initialisieren")
+    if setup:
+        setup_db()
 
 
 def menu():
