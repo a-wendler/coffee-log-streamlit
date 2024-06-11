@@ -27,6 +27,7 @@ class Payment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     betrag: Mapped[float] = mapped_column(Float, nullable=False)
     betreff: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    typ: Mapped[str] = mapped_column(String, nullable=False)
     ts: Mapped[datetime] = mapped_column(String, nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="payments")
