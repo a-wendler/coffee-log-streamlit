@@ -1,4 +1,5 @@
 """Models"""
+
 from __future__ import annotations
 from typing import List, Optional
 from datetime import datetime
@@ -11,8 +12,10 @@ from sqlalchemy.orm import mapped_column, Mapped, relationship
 class Base(DeclarativeBase):
     pass
 
+
 class Log(Base):
     """Model für einen Logbucheintrag"""
+
     __tablename__ = "coffee_log"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     anzahl: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -23,6 +26,7 @@ class Log(Base):
 
 class Payment(Base):
     """Model für ein Payment"""
+
     __tablename__ = "payments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     betrag: Mapped[float] = mapped_column(Float, nullable=False)
@@ -35,6 +39,7 @@ class Payment(Base):
 
 class User(Base):
     """Mode für einen User"""
+
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
