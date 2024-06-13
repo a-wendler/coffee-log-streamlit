@@ -27,8 +27,9 @@ def new_payment():
 def edit_payment_data():
     with conn.session as session:
         for index, row in st.session_state.data_editor["edited_rows"].items():
+            df_index = edited_df.iloc[int(index), 0]
             payment = session.execute(
-                select(Payment).filter(Payment.id == edited_df.iloc[index, 0])
+                select(Payment).where(Payment.id == int(df_index))
             ).scalar_one()
             for k, v in row.items():
                 setattr(payment, k, v)
@@ -82,10 +83,11 @@ with conn.session as session:
             for payment in payments
         ]
     )
-    edited_df = st.data_editor(
-        df,
-        num_rows="dynamic",
-        key="data_editor",
-        disabled=["id", "name"],
-    )
-    st.button("Änderungen speichern", on_click=edit_payment_data)
+
+edited_df = st.data_editor(
+    df,
+    num_rows="dynamic",
+    key="data_editor",
+    disabled=["id", "name"],
+)
+st.button("Änderungen speichern", on_click=edit_payment_data)
