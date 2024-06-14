@@ -74,16 +74,6 @@ def check_user():
             pass
 
 
-def get_subscription_fee():
-    # Get the number of members
-    with conn.session as session:
-        num_members = session.execute(select(User).where(User.mitglied == True))
-        if num_members.count() == 0:
-            return 0
-        else:
-            return monatsmiete / num_members
-
-
 # Streamlit app layout
 
 # Initialize the database

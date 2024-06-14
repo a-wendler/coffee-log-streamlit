@@ -34,12 +34,16 @@ def edit_payment_data():
             for k, v in row.items():
                 setattr(payment, k, v)
             session.commit()
-    st.success("Änderungen wurden gespeichert!")
+        st.success("Änderungen wurden gespeichert!")
+
+
+def sync_data_editor():
+    st.session_state.data_editor = edited_df
 
 
 # Streamlit app layout
 menu_with_redirect()
-st.write(st.session_state)
+# st.write(st.session_state)
 conn = st.connection("coffee_counter", type="sql")
 st.subheader("Zahlung hinzufügen")
 with st.form(key="payment_form", clear_on_submit=True):
@@ -57,15 +61,15 @@ with st.form(key="payment_form", clear_on_submit=True):
             .name,
             key="user",
         )
-        betreff = st.text_input("Betreff", key="betreff")
-        typ = st.selectbox(
-            "Typ",
-            ["Einkauf", "Rücklage", "Korrektur", "Auszahlung", "Einzahlung", "Miete"],
-            key="typ",
-        )
-        betrag = st.number_input("Betrag", key="betrag")
-        ts = st.date_input("Datum", key="ts", format="DD.MM.YYYY")
-        submit = st.form_submit_button("Zahlung hinzufügen", on_click=new_payment)
+    betreff = st.text_input("Betreff", key="betreff")
+    typ = st.selectbox(
+        "Typ",
+        ["Einkauf", "Rücklage", "Korrektur", "Auszahlung", "Einzahlung", "Miete"],
+        key="typ",
+    )
+    betrag = st.number_input("Betrag", key="betrag")
+    ts = st.date_input("Datum", key="ts", format="DD.MM.YYYY")
+    submit = st.form_submit_button("Zahlung hinzufügen", on_click=new_payment)
 
 st.subheader("Zahlungen bearbeiten")
 with conn.session as session:
@@ -84,10 +88,10 @@ with conn.session as session:
         ]
     )
 
-edited_df = st.data_editor(
-    df,
-    num_rows="dynamic",
-    key="data_editor",
-    disabled=["id", "name"],
-)
-st.button("Änderungen speichern", on_click=edit_payment_data)
+with st.form(key="edit_payment_data"):
+    edited_df = st.data_editor(
+        df,
+        key="data_editor",
+        disabled=["id", "name"],
+    )
+    st.form_submit_button("Änderungen speichern", on_click=edit_payment_data)
