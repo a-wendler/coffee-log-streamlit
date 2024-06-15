@@ -35,6 +35,8 @@ class Payment(Base):
     ts: Mapped[datetime] = mapped_column(String, nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="payments")
+    invoice_id: Mapped[Optional[int]] = mapped_column(ForeignKey("invoices.id"))
+    invoice: Mapped[Optional["Invoice"]] = relationship(back_populates="payments")
 
 
 class User(Base):
@@ -53,3 +55,23 @@ class User(Base):
     ts: Mapped[datetime] = mapped_column(String, nullable=False)
     logs: Mapped[List[Log]] = relationship(back_populates="user")
     payments: Mapped[List[Payment]] = relationship(back_populates="user")
+    invoices: Mapped[List["Invoice"]] = relationship(back_populates="user")
+
+
+class Invoice(Base):
+    """Model für eine Rechnung"""
+
+    __tablename__ = "invoices"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    gesamtbetrag: Mapped[float] = mapped_column(Float, nullable=False)
+    kaffee_anzahl: Mapped[int] = mapped_column(Integer, nullable=False)
+    kaffee_preis: Mapped[float] = mapped_column(Float, nullable=False)
+    miete: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    payment_betrag: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    monat: Mapped[datetime] = mapped_column(String, nullable=False)
+    email_versand: Mapped[Optional[datetime]] = mapped_column(String, nullable=True)
+    bezahlt: Mapped[Optional[datetime]] = mapped_column(String, nullable=True)
+    ts: Mapped[datetime] = mapped_column(String, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user: Mapped["User"] = relationship(back_populates="invoices")
+    payments: Mapped[Optional[Payment]] = relationship(back_populates="invoice")
