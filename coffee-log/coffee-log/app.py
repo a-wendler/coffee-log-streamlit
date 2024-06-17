@@ -3,11 +3,10 @@ from datetime import datetime
 from hashlib import sha256
 
 import streamlit as st
-import pandas as pd
-from sqlalchemy import select
 
 from models import Log, User
 from menu import menu
+from pages.mail import send_reset_email
 
 monatsmiete = 215
 kaffeepreis_mitglied = 0.25
@@ -81,7 +80,7 @@ conn = st.connection("coffee_counter", type="sql")
 
 if "current_user" not in st.session_state:
     st.session_state.current_user = {"name": "", "role": None}
-st.write(st.session_state)
+# st.write(st.session_state)
 
 
 menu()
@@ -117,9 +116,14 @@ with st.expander("Kennwort vergessen?"):
     email = st.text_input("Geben Sie Ihre E-Mail-Adresse ein:")
     if st.button("Kennwort zurücksetzen"):
         reset_key = reset_password(email)
-        st.write(
-            f"Ein Link zum Zurücksetzen Ihres Kennworts wurde an {email} gesendet."
-        )
-        st.write(f"Der Link zum Zurücksetzen Ihres Kennworts lautet {reset_key}.")
-
-st.write(st.session_state)
+        if reset_key:
+            try:
+                send_reset_email(email, reset_key)
+                st.write(
+                    f"Ein Link zum Zurücksetzen Ihres Kennworts wurde an {email} gesendet."
+                )
+            except Exception as e:
+                st.error(f"Beim Senden der E-Mail ist ein Fehler aufgetreten: {e}")
+        else:
+            st.error("Fehler beim Zurücksetzen des Passwortes!")
+# st.write(st.session_state)

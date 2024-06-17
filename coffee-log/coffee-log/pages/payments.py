@@ -1,4 +1,6 @@
-"""Module for editing payment data."""
+"""
+Module for editing payment data.
+"""
 
 from datetime import datetime
 import streamlit as st
@@ -73,16 +75,16 @@ with st.form(key="payment_form", clear_on_submit=True):
 
 st.subheader("Zahlungen bearbeiten")
 with conn.session as session:
-    payments = session.execute(select(Payment)).scalars().all()
+    payments = session.scalars(select(Payment)).all()
     df = pd.DataFrame().from_records(
         [
             {
-                "id": payment.id,
-                "name": payment.user.name,
-                "betrag": payment.betrag,
-                "betreff": payment.betreff,
-                "typ": payment.typ,
-                "ts": payment.ts,
+                "ID": payment.id,
+                "Einzahler": payment.user.name,
+                "Betrag": payment.betrag,
+                "Betreff": payment.betreff,
+                "Typ": payment.typ,
+                "Datum": payment.ts,
             }
             for payment in payments
         ]

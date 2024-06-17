@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, TypedDict, Optional
 import pandas as pd
 import streamlit as st
 from menu import menu_with_redirect
@@ -10,10 +10,10 @@ from sqlalchemy import select, extract, func
 
 def get_subscription_fee() -> float:
     # Get the number of members
-    with conn.session as session:
-        num_members = (
-            session.query(func.count(User.id)).filter(User.mitglied == True).scalar()
-        )
+    with conn.session as get_subscription_fee_session:
+        num_members_stmt = select(func.count(User.id)).where(User.mitglied == 1)
+        num_members = get_subscription_fee_session.scalar(num_members_stmt)
+
     if num_members < 1:
         return 0
     return round(st.secrets.MIETE / num_members, 2)
@@ -22,9 +22,18 @@ def get_subscription_fee() -> float:
 def gesamt_abrechnung(datum):
     st.header("Gesamtabrechnung")
 
-    st.write("Mitgliederkaffees:", get_member_coffees(datum))
-    st.write("Gastkaffees:", get_guest_coffees(datum))
-    st.write("Gesamtkaffees:", get_member_coffees(datum) + get_guest_coffees(datum))
+    st.write(
+        "Mitgliederkaffees:",
+        get_coffee_number(monat=datum, gruppe="mitglied"),
+    )
+    st.write(
+        "Gastkaffees:",
+        get_coffee_number(monat=datum, gruppe="gast"),
+    )
+    st.write(
+        "Gesamtkaffees:",
+        get_coffee_number(monat=datum),
+    )
 
     with conn.session as session:
         payments = (
@@ -50,56 +59,88 @@ def gesamt_abrechnung(datum):
     payments_df = pd.DataFrame().from_records(payment_list)
     st.subheader("Zahlungen")
     payments_df
-    st.write("Verbrauchskosten:", get_payment_sum(datum))
-    st.write("Miete:", st.secrets.MIETE)
-    st.write("Gesamtkosten:", get_payment_sum(datum) + st.secrets.MIETE)
-    st.write("Mitgliederkaffeepreis:", get_member_coffee_price(datum))
+    st.write("Verbrauchskosten: €", get_payment_sum(datum))
+    st.write("Miete: €", st.secrets.MIETE)
+    st.write("Gesamtkosten: €", round(get_payment_sum(datum) + st.secrets.MIETE, 2))
+    st.write("Mitgliederkaffeepreis: €", get_member_coffee_price(datum))
 
 
-def get_member_coffees(month):
-    with conn.session as session:
-        return (
-            session.query(func.sum(Log.anzahl))
-            .join(Log.user)
-            .filter(
-                extract("month", Log.ts) == month.month,
-                extract("year", Log.ts) == month.year,
-                User.mitglied == 1,
-            )
-            .scalar()
+class coffee_number_kwargs(TypedDict, total=False):
+    monat: Optional[datetime] = datetime.now()
+    gruppe: Optional[str] = "all"
+    user_id: Optional[int] = None
+
+
+def get_coffee_number(**kwargs: coffee_number_kwargs) -> int:
+    """
+    Ermittelt die Anzahl von Kaffees.
+
+    Optionale Keyword Arguments:
+
+    monat: Optional[datetime], default datetime.now(), beliebiges Datum aus einem Monat. Es werden die Kaffees dieses Monats ermittelt. Standard ist der aktuelle Monat.
+
+    gruppe: Optional[str], default 'all', Optionen: 'all', 'mitglied', 'gast', gibt die Gruppe an, für die die Kaffees ermittelt werden sollen, wenn Argument nicht übergeben, werden alle Gruppen ermittelt
+
+    user_id: Optional[int], default None; gibt Kaffees für einen User zurück, wenn Argument übergeben, sonst Kaffees für alle User. Wenn Argument übergeben, wird 'gruppe' ignoriert.
+
+    return: int: Anzahl von Kaffees
+    """
+    # Default values für kwargs
+    monat = kwargs.get("monat", datetime.now())
+    gruppe = kwargs.get("gruppe", "all")
+    user_id = kwargs.get("user_id", None)
+
+    # Checken, ob die Argumente die richtigen Typen haben
+    if not isinstance(monat, datetime):
+        raise ValueError("Argument 'monat' muss ein datetime-Objekt sein")
+    if not gruppe in ["all", "mitglied", "gast"]:
+        raise ValueError("Argument 'gruppe' muss 'all', 'mitglied' oder 'gast' sein")
+    if user_id and not isinstance(user_id, int):
+        raise ValueError("Argument 'user_id' muss ein Integer sein")
+
+    with conn.session as coffee_number_session:
+        coffee_number_stmt = select(func.sum(Log.anzahl)).where(
+            extract("month", Log.ts) == monat.month,
+            extract("year", Log.ts) == monat.year,
         )
 
+        if user_id:
+            coffee_number_stmt = coffee_number_stmt.where(Log.user_id == user_id)
+            kaffeemenge = coffee_number_session.scalar(coffee_number_stmt)
+            if kaffeemenge:
+                if kaffeemenge > 0:
+                    return kaffeemenge
 
-def get_guest_coffees(month):
-    with conn.session as session:
-        return (
-            session.query(func.sum(Log.anzahl))
-            .join(Log.user)
-            .filter(
-                extract("month", Log.ts) == month.month,
-                extract("year", Log.ts) == month.year,
-                User.mitglied == 0,
-            )
-            .scalar()
-        )
+        if gruppe == "mitglied":
+            coffee_number_stmt = coffee_number_stmt.join(User).where(User.mitglied == 1)
+        if gruppe == "gast":
+            coffee_number_stmt = coffee_number_stmt.join(User).where(User.mitglied == 0)
+
+        kaffeemenge = coffee_number_session.scalar(coffee_number_stmt)
+
+    if kaffeemenge:
+        if kaffeemenge > 0:
+            return kaffeemenge
+    return 0
 
 
-def get_payment_sum(month):
-    with conn.session as session:
+def get_payment_sum(month: datetime) -> float:
+    with conn.session as get_payment_session:
         betrag = (
-            session.query(func.sum(Payment.betrag))
+            get_payment_session.query(func.sum(Payment.betrag))
             .filter(
                 extract("month", Payment.ts) == month.month,
                 extract("year", Payment.ts) == month.year,
             )
             .scalar()
         )
-    if betrag > 0:
-        return round(betrag, 2)
-    return 0
+    if betrag:
+        if betrag > 0:
+            return round(betrag, 2)
+    return 0.0
 
 
-def get_payments(month) -> List[Payment]:
+def get_payments(month: datetime) -> List[Payment]:
     with conn.session as session:
         return (
             session.query(Payment)
@@ -111,50 +152,80 @@ def get_payments(month) -> List[Payment]:
         )
 
 
-def get_member_coffee_price(month):
-    member_coffees = get_member_coffees(month)
-    guest_coffees = get_guest_coffees(month)
+def get_member_coffee_price(month: datetime) -> float:
+    """
+    Ermittelt den Preis für einen Mitgliederkaffee.
+    """
+    member_coffees = get_coffee_number(monat=month, gruppe="mitglied")
+    guest_coffees = get_coffee_number(monat=month, gruppe="gast")
     payment_sum = get_payment_sum(month)
 
     gesamtkosten = st.secrets.MIETE + payment_sum
     return round((gesamtkosten - guest_coffees) / member_coffees, 2)
 
 
-def einzelabrechnung(monat, user_id) -> Invoice:
-    with conn.session as session:
-        kaffee_anzahl = (
-            session.query(func.sum(Log.anzahl))
-            .filter(
-                extract("month", Log.ts) == monat.month,
-                extract("year", Log.ts) == monat.year,
-                Log.user_id == user_id,
-            )
-            .scalar()
+class einzelabrechnung_kwargs(TypedDict):
+    monat: Optional[datetime] = datetime.now()
+    user_id: int
+
+
+def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
+    """
+    Erstellt eine Einzelabrechnung für einen Nutzer.
+
+    Keyword Arguments:
+
+    monat: Optional[datetime], default datetime.now(), beliebiges Datum aus einem Monat. Es werden die Kaffees dieses Monats ermittelt. Standard ist der aktuelle Monat.
+    user_id: int, ID des Nutzers, für den die Abrechnung erstellt werden soll. Muss übergeben werden.
+
+    returns: Invoice-Objekt
+    """
+    # Default values für kwargs
+    monat = kwargs.get("monat", datetime.now())
+    user_id = kwargs.get("user_id")
+
+    if not user_id:
+        raise ValueError("Argument 'user_id' muss übergeben werden")
+
+    # Checken, ob die Argumente die richtigen Typen haben
+    if not isinstance(monat, datetime):
+        raise ValueError("Argument 'monat' muss ein datetime-Objekt sein")
+    if not isinstance(user_id, int):
+        raise ValueError("Argument 'user_id' muss ein Integer sein")
+
+    kaffee_anzahl = get_coffee_number(monat=monat, user_id=user_id)
+
+    with conn.session as einzelabrechnung_session:
+        member_status = einzelabrechnung_session.scalar(
+            select(User.mitglied).where(User.id == user_id)
         )
 
-        payments = (
-            session.query(Payment)
-            .filter(
-                extract("month", Payment.ts) == monat.month,
-                extract("year", Payment.ts) == monat.year,
-                Payment.user_id == user_id,
-            )
-            .scalar()
+        payments_stmt = select(Payment).where(
+            extract("month", Payment.ts) == monat.month,
+            extract("year", Payment.ts) == monat.year,
+            Payment.user_id == user_id,
         )
 
-        payment_betrag = (
-            session.query(func.sum(Payment.betrag))
-            .filter(
-                extract("month", Payment.ts) == monat.month,
-                extract("year", Payment.ts) == monat.year,
-                Payment.user_id == user_id,
-            )
-            .scalar()
+        payments = einzelabrechnung_session.scalar(payments_stmt)
+
+        betrag_stmt = select(func.sum(Payment.betrag)).where(
+            extract("month", Payment.ts) == monat.month,
+            extract("year", Payment.ts) == monat.year,
+            Payment.user_id == user_id,
         )
+
+        payment_betrag = einzelabrechnung_session.scalar(betrag_stmt)
+        if not payment_betrag:
+            payment_betrag = 0.0
 
         miete = get_subscription_fee()
-        kaffee_preis = get_member_coffee_price(monat) * kaffee_anzahl
-        gesamtbetrag = kaffee_preis + miete - payment_betrag
+
+        if member_status == 1:
+            kaffee_preis = get_member_coffee_price(monat) * kaffee_anzahl
+            gesamtbetrag = round(kaffee_preis + miete - payment_betrag, 2)
+        if member_status == 0:
+            kaffee_preis = kaffee_anzahl * st.secrets.KAFFEEPREIS_GAST
+            gesamtbetrag = round(kaffee_preis - payment_betrag, 2)
 
     return Invoice(
         kaffee_anzahl=kaffee_anzahl,
@@ -165,7 +236,7 @@ def einzelabrechnung(monat, user_id) -> Invoice:
         monat=datum,
         payments=payments,
         user_id=user_id,
-        ts=datetime.now().isoformat(),
+        ts=datetime.now(),
     )
 
 
@@ -236,8 +307,28 @@ datum = st.selectbox(
     monatsliste,
     format_func=lambda x: uebersetzungen[x.strftime("%B")] + " " + x.strftime("%Y"),
 )
-st.write(datum)
+
 if datum:
     gesamt_abrechnung(datum)
-    st.subheader("Einzelabrechnung")
-    st.write(einzelabrechnung(datum, 1))
+    st.subheader("Einzelabrechnungen")
+    with conn.session as session:
+        stmt = (
+            select(User)
+            .filter(User.status == "active")
+            .order_by(User.name, User.vorname)
+        )
+        users = session.scalars(stmt).all()
+        abrechnungen_list = []
+        for user in users:
+            abrechnung = einzelabrechnung(monat=datum, user_id=user.id)
+            abrechnungen_list.append(
+                {
+                    "Name": user.name,
+                    "Vorname": user.vorname,
+                    "Monatsbetrag": round(abrechnung.gesamtbetrag, 2),
+                    "Kaffeeanzahl": abrechnung.kaffee_anzahl,
+                }
+            )
+        df = pd.DataFrame().from_records(abrechnungen_list)
+        table = st.table(df)
+        st.write("Gesamtsumme:", round(df.Monatsbetrag.sum(), 2))
