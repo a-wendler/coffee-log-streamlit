@@ -1,4 +1,6 @@
-"""Module to activate user account via query parameter token."""
+"""
+Module to activate user account via query parameter token.
+"""
 
 import time
 
@@ -28,12 +30,12 @@ def activate(token):
 # Streamlit app layout
 
 # Initialize the database
-conn = st.connection("coffee_counter", type="sql")
+
 
 if "token" in st.query_params:
     if st.query_params.token.startswith("activate_"):
+        conn = st.connection("coffee_counter", type="sql")
         activate(st.query_params.token)
-
 else:
     st.error("Ungültiger Link!")
 

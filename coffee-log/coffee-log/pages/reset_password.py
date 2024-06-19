@@ -1,7 +1,14 @@
-import streamlit as st
+"""
+Modul zum Vergeben eines neuen Passwortes, wenn zuvor ein reset_token angefordert wurde.
+"""
+import time
 from hashlib import sha256
-from models import User
+
+import streamlit as st
 from sqlalchemy import select
+
+from models import User
+
 
 
 def set_new_password(token):
@@ -34,3 +41,6 @@ if "token" in st.query_params:
         set_new_password(st.query_params.token)
 else:
     st.error("Ungültiger Link!")
+
+time.sleep(3)
+st.switch_page("app.py")

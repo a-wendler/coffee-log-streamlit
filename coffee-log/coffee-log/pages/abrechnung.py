@@ -37,12 +37,12 @@ def gesamt_abrechnung(datum):
 
     with conn.session as session:
         payments = (
-            session.query(Payment)
+            session.scalars(select(Payment)
             .join(User)
-            .filter(
+            .where(
                 extract("month", Payment.ts) == datum.month,
                 extract("year", Payment.ts) == datum.year,
-            )
+            ))
             .all()
         )
         payment_list = []
