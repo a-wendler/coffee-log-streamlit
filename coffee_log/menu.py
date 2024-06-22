@@ -3,9 +3,11 @@ from sqlalchemy import create_engine
 
 from models import Base
 
+# dialect+driver://username:password@host:port/database
+db_url = f"{st.secrets["connections.coffee_counter"]["dialect"]}+{st.secrets["connections.coffee_counter"]["driver"]}://{st.secrets["connections.coffee_counter"]["username"]}:{st.secrets["connections.coffee_counter"]["password"]}@{st.secrets["connections.coffee_counter"]["host"]}:{st.secrets["connections.coffee_counter"]["port"]}/{st.secrets["connections.coffee_counter"]["database"]}"
 
 def setup_db():
-    engine = create_engine("sqlite:///coffee_counter.db", echo=True)
+    engine = create_engine(db_url, echo=True)
     Base.metadata.create_all(engine)
 
 
