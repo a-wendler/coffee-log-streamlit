@@ -58,7 +58,6 @@ def unauthenticated_menu():
 
 
 def menu():
-    st.write(st.secrets.connections.coffee_counter["url"])
     # Determine if a user is logged in or not, then show the correct
     # navigation menu
     if (
