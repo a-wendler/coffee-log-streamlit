@@ -24,8 +24,10 @@ def set_new_password(token):
                     user.code = sha256(new_password.encode("utf-8")).hexdigest()
                     user.token = None
                     session.commit()
-                    st.success(
-                        "Kennwort wurde geändert! Gehen Sie [zurück zur Startseite](https://lsbkaffee.streamlit.app)"
+
+                    st.markdown(
+                        f"""Kennwort wurde geändert! Gehen Sie <a href="https://lsbkaffee.streamlit.app" target="_self">zurück zur Startseite</a>.""",
+                        unsafe_allow_html=True,
                     )
                     st.query_params.clear()
         except:

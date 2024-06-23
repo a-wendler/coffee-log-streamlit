@@ -41,6 +41,8 @@ def add_user(code, name, vorname, email):
 # Streamlit app layout
 
 # Initialize the database
+if "current_user" not in st.session_state:
+    st.session_state.current_user = {"name": "", "role": None}
 menu()
 conn = st.connection("coffee_counter", type="sql")
 

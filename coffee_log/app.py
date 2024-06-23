@@ -92,16 +92,21 @@ with st.expander("Kennwort vergessen?"):
         else:
             st.error("Fehler beim Zurücksetzen des Passwortes!")
 st.subheader("So funktioniert es:")
+app_path = "https://lsbkaffee.streamlit.app"
+page_file_path = "pages/register.py"
+page = page_file_path.split("/")[1][0:-3]
+
 st.markdown(
     f"""
-    1. [Registrieren](https://lsbkaffee.streamlit.app/register) Sie sich.
+    1. <a href="{app_path}/{page}" target="_self">Registrieren</a> Sie sich.
     2. Tragen Sie jeden Kaffee in dieses Tool ein, den Sie trinken.
     3. Erhalten Sie am Monatsende eine Abrechnung und zahlen Sie Ihren Anteil.
     
     __Warum digital?__ Die Abrechnung macht keinen Aufwand und Sie haben jederzeit einen Überblick über Ihre Kaffeeausgaben.
 
     Ein Kaffee kostet € 1,– für Gäste und € 0,25 für Mitglieder, die sich an der Monatsmiete beteiligen. Wenn Sie Mitglied werden wollen, registrieren Sie sich hier und wenden Sie sich an {st.secrets.admins['rechnung']}.
-"""
+""",
+    unsafe_allow_html=True,
 )
 st.expander("Datenschutz").markdown(
     f"Diese App speichert nur die Daten, die Sie eingeben. Die Daten werden ausschließlich zum Aufteilen der Unkosten für die Kaffeemaschine im 3. OG verwendet. Die Daten sind auf einem Server beim deutschen Anbieter Hetzner in Nürnberg gespeichert. Der Zugriff auf die Daten ist nur für die Administratoren der Kaffeekasse möglich. Sie können jederzeit einen vollständigen Einblick in Ihre Daten erhalten und die Löschung Ihrer Daten verlangen. Bitte wenden Sie sich dazu an {st.secrets.admins['technik']}."
