@@ -24,7 +24,9 @@ def set_new_password(token):
                     user.code = sha256(new_password.encode("utf-8")).hexdigest()
                     user.token = None
                     session.commit()
-                    st.success("Kennwort wurde geändert!")
+                    st.success(
+                        "Kennwort wurde geändert! Gehen Sie [zurück zur Startseite](https://lsbkaffee.streamlit.app)"
+                    )
                     st.query_params.clear()
         except:
             st.error("Ungültiger Link!")
@@ -38,6 +40,5 @@ conn = st.connection("coffee_counter", type="sql")
 if "token" in st.query_params:
     if st.query_params.token.startswith("reset_"):
         set_new_password(st.query_params.token)
-        st.write("Gehen Sie [zurück zur Startseite](https://lsbkaffee.streamlit.app)")
 else:
     st.error("Ungültiger Link!")
