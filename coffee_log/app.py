@@ -54,7 +54,7 @@ conn = st.connection("coffee_counter", type="sql")
 
 if "current_user" not in st.session_state:
     st.session_state.current_user = {"name": "", "role": None}
-st.write(st.session_state)
+# st.write(st.session_state)
 
 
 menu()

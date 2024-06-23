@@ -213,9 +213,9 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
     kaffee_anzahl = get_coffee_number(monat=monat, user_id=user_id)
 
     with conn.session as einzelabrechnung_session:
-        member_status = einzelabrechnung_session.scalar(
-            select(User.mitglied).where(User.id == user_id)
-        )
+        user = einzelabrechnung_session.scalar(select(User).where(User.id == user_id))
+
+        member_status = user.mitglied
 
         payments_stmt = select(Payment).where(
             extract("month", Payment.ts) == monat.month,
@@ -253,8 +253,36 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
         monat=datum,
         payments=payments,
         user_id=user_id,
+        user=user,
         ts=datetime.now(),
     )
+
+
+class monatsliste_kwargs(TypedDict):
+    monat: Optional[datetime] = datetime.now()
+
+
+@st.cache_data
+def monatsliste(**kwargs: monatsliste_kwargs):
+    # Default values für kwargs
+    monat = kwargs.get("monat", datetime.now())
+
+    # Checken, ob die Argumente die richtigen Typen haben
+    if not isinstance(monat, datetime):
+        raise ValueError("Argument 'monat' muss ein datetime-Objekt sein")
+
+    with conn.session as session:
+        stmt = (
+            select(User)
+            .filter(User.status == "active")
+            .order_by(User.name, User.vorname)
+        )
+        users = session.scalars(stmt).all()
+        abrechnungen_list = []
+        for user in users:
+            rechnung = einzelabrechnung(monat=datum, user_id=user.id)
+            abrechnungen_list.append(rechnung)
+        return abrechnungen_list
 
 
 def einzelabrechnung_web(datum):
@@ -299,9 +327,8 @@ def einzelabrechnung_web(datum):
     st.write("Miete anteilig:", miete_anteilig)
 
 
-menu_with_redirect()
-
 # Streamlit app layout
+menu_with_redirect()
 
 conn = st.connection("coffee_counter", type="sql")
 st.subheader("Abrechnung")
@@ -320,10 +347,10 @@ uebersetzungen = {
     "November": "November",
     "December": "Dezember",
 }
-monatsliste = get_first_days_of_last_six_months()
+monate = get_first_days_of_last_six_months()
 datum = st.selectbox(
     "Abrechnungsmonat",
-    monatsliste,
+    monate,
     format_func=lambda x: x.strftime("%B") + " " + x.strftime("%Y"),
 )
 
@@ -331,29 +358,23 @@ if datum:
     gesamt_abrechnung(datum)
     st.subheader("Einzelabrechnungen")
     with st.spinner("Einzelabrechnungen werden erstellt …"):
-        with conn.session as session:
-            stmt = (
-                select(User)
-                .filter(User.status == "active")
-                .order_by(User.name, User.vorname)
+        monats_liste = monatsliste(monat=datum)
+        show_liste = []
+        for abrechnung in monats_liste:
+            show_liste.append(
+                {
+                    "Name": abrechnung.user.name,
+                    "Monatsbetrag": quantize_decimal(abrechnung.gesamtbetrag),
+                    "Kaffeeanzahl": abrechnung.kaffee_anzahl,
+                    "Gutschriften": abrechnung.payment_betrag,
+                }
             )
-            users = session.scalars(stmt).all()
-            abrechnungen_list = []
-            for user in users:
-                abrechnung = einzelabrechnung(monat=datum, user_id=user.id)
-                abrechnungen_list.append(
-                    {
-                        "Name": user.name,
-                        "Vorname": user.vorname,
-                        "Monatsbetrag": quantize_decimal(abrechnung.gesamtbetrag),
-                        "Kaffeeanzahl": abrechnung.kaffee_anzahl,
-                    }
-                )
-            df = pd.DataFrame().from_records(abrechnungen_list)
-            table = st.dataframe(
-                df,
-                column_config={
-                    "Monatsbetrag": st.column_config.NumberColumn(format="€ %g")
-                },
-            )
-            st.write("Gesamtsumme:", df.Monatsbetrag.sum())
+
+        df = pd.DataFrame().from_records(show_liste)
+        table = st.dataframe(
+            df,
+            column_config={
+                "Monatsbetrag": st.column_config.NumberColumn(format="€ %g")
+            },
+        )
+        st.write("Gesamtsumme:", df.Monatsbetrag.sum())

@@ -32,6 +32,14 @@ def authenticated_menu():
             "pages/payments.py",
             label="Zahlungen",
         )
+        st.sidebar.page_link(
+            "pages/account.py",
+            label="Kontoübersicht",
+        )
+    st.sidebar.divider()
+    setup = st.sidebar.button("Datenbank initialisieren")
+    if setup:
+        setup_db()
     st.sidebar.divider()
     st.sidebar.write(f"Eingeloggt als: {st.session_state.current_user['vorname']} {st.session_state.current_user['name']}")
     
@@ -45,17 +53,13 @@ def unauthenticated_menu():
     st.sidebar.page_link("app.py", label="Start")
     st.sidebar.page_link("pages/register.py", label="Registrieren")
     st.sidebar.divider()
-
-    with st.sidebar.popover("Login"):
-        st.write("Bitte melden Sie sich an.")
-        code_input = st.text_input("Kennwort", type="password", key="code_login", on_change=check_user)
-        if st.button("Anmelden"):
-            check_user()
-
     st.sidebar.write("Nicht eingeloggt")
-    setup = st.sidebar.button("Datenbank initialisieren")
-    if setup:
-        setup_db()
+    with st.sidebar.popover("Login"):
+        with st.form(key="login_form", clear_on_submit=True):
+            code_input = st.text_input("Kennwort", type="password", key="code_login")
+            button = st.form_submit_button("Login", on_click=check_user)
+        if button:
+            st.sidebar.success("Erfolgreich eingeloggt!")
 
 
 def menu():

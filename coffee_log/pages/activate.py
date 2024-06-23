@@ -29,9 +29,6 @@ def activate(token):
 
 # Streamlit app layout
 
-# Initialize the database
-
-
 if "token" in st.query_params:
     if st.query_params.token.startswith("activate_"):
         conn = st.connection("coffee_counter", type="sql")

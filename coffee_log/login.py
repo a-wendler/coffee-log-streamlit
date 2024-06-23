@@ -4,14 +4,12 @@ import streamlit as st
 
 
 def check_user():
-    st.write("Passwort aus state", st.session_state.code_input)
     if "code_input" in st.session_state:
         if len(st.session_state.code_input) > 0:
             pwd = st.session_state.code_input
     if "code_login" in st.session_state:
         if len(st.session_state.code_login) > 0:
             pwd = st.session_state.code_login
-    st.write("Passwort", pwd)
     with conn.session as local_session:
         try:
             user = (
@@ -31,7 +29,7 @@ def check_user():
                 st.session_state.current_user["role"] = "user"
             st.session_state.user = user
         except:
-            st.write("Fehler in check_user!")
+            st.error("Fehler beim Login!")
 
 
 conn = st.connection("coffee_counter", type="sql")
