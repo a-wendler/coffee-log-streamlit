@@ -1,16 +1,12 @@
 from datetime import datetime
 from typing import List, TypedDict, Optional, Union
 from decimal import Decimal
-import locale
-
 import pandas as pd
 import streamlit as st
 from sqlalchemy import select, extract, func
 from menu import menu_with_redirect
 from pages.monatsuebersicht import get_first_days_of_last_six_months
 from models import Log, User, Payment, Invoice
-
-locale.setlocale(locale.LC_ALL, "de_DE.UTF-8")
 
 
 def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
@@ -351,7 +347,7 @@ monate = get_first_days_of_last_six_months()
 datum = st.selectbox(
     "Abrechnungsmonat",
     monate,
-    format_func=lambda x: x.strftime("%B") + " " + x.strftime("%Y"),
+    format_func=lambda x: uebersetzungen[x.strftime("%B")] + " " + x.strftime("%Y"),
 )
 
 if datum:
