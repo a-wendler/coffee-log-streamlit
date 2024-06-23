@@ -48,10 +48,6 @@ def authenticated_menu():
 
 def unauthenticated_menu():
     # Show a navigation menu for unauthenticated users
-    st.sidebar.divider()
-    setup = st.sidebar.button("Datenbank initialisieren")
-    if setup:
-        setup_db()
     st.sidebar.title("LSB Kaffeeabrechnung")
     st.sidebar.page_link("app.py", label="Start")
     st.sidebar.page_link("pages/register.py", label="Registrieren")
