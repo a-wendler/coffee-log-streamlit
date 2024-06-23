@@ -58,7 +58,7 @@ if "current_user" not in st.session_state:
 
 
 menu()
-st.header("LSB Kaffeeabrechnung")
+st.header("☕ LSB Kaffeeabrechnung")
 st.subheader("Kaffee trinken")
 with st.form(key="log_coffee", clear_on_submit=True):
     anzahl = st.select_slider(
