@@ -1,12 +1,16 @@
 from datetime import datetime
 from typing import List, TypedDict, Optional, Union
 from decimal import Decimal
+import locale
+
 import pandas as pd
 import streamlit as st
 from sqlalchemy import select, extract, func
 from menu import menu_with_redirect
 from pages.monatsuebersicht import get_first_days_of_last_six_months
 from models import Log, User, Payment, Invoice
+
+locale.setlocale(locale.LC_ALL, "de_DE.UTF-8")
 
 
 def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
@@ -65,7 +69,10 @@ def gesamt_abrechnung(datum):
             )
     payments_df = pd.DataFrame().from_records(payment_list)
     st.subheader("Zahlungen")
-    payments_df
+    st.dataframe(
+        payments_df,
+        column_config={"Betrag": st.column_config.NumberColumn(format="€ %.2f")},
+    )
     st.write("Verbrauchskosten: €", get_payment_sum(datum))
     st.write("Miete: €", quantize_decimal(st.secrets.MIETE))
     st.write(
@@ -317,7 +324,7 @@ monatsliste = get_first_days_of_last_six_months()
 datum = st.selectbox(
     "Abrechnungsmonat",
     monatsliste,
-    format_func=lambda x: uebersetzungen[x.strftime("%B")] + " " + x.strftime("%Y"),
+    format_func=lambda x: x.strftime("%B") + " " + x.strftime("%Y"),
 )
 
 if datum:
@@ -343,5 +350,10 @@ if datum:
                     }
                 )
             df = pd.DataFrame().from_records(abrechnungen_list)
-            table = st.table(df)
+            table = st.dataframe(
+                df,
+                column_config={
+                    "Monatsbetrag": st.column_config.NumberColumn(format="€ %g")
+                },
+            )
             st.write("Gesamtsumme:", df.Monatsbetrag.sum())

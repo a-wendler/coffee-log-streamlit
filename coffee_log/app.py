@@ -8,9 +8,7 @@ from models import Log, User
 from menu import menu
 from pages.mail import send_reset_email
 
-monatsmiete = 215
-kaffeepreis_mitglied = 0.25
-kaffeepreis_gast = 1.0
+from login import check_user
 
 
 def reset_password(email):
@@ -49,30 +47,6 @@ def log_coffee():
         st.error("Ungültiges Kennwort oder Nutzerkonto nicht aktiviert!")
 
 
-def check_user():
-    with conn.session as session:
-        try:
-            user = (
-                session.query(User)
-                .filter(
-                    User.code
-                    == sha256(st.session_state.code_input.encode("utf-8")).hexdigest(),
-                    User.status == "active",
-                )
-                .first()
-            )
-            st.session_state.current_user["name"] = user.name
-            st.session_state.current_user["vorname"] = user.vorname
-            st.session_state.current_user["id"] = user.id
-            if user.admin:
-                st.session_state.current_user["role"] = "admin"
-            else:
-                st.session_state.current_user["role"] = "user"
-            st.session_state.user = user
-        except:
-            pass
-
-
 # Streamlit app layout
 
 # Initialize the database
@@ -80,7 +54,7 @@ conn = st.connection("coffee_counter", type="sql")
 
 if "current_user" not in st.session_state:
     st.session_state.current_user = {"name": "", "role": None}
-# st.write(st.session_state)
+st.write(st.session_state)
 
 
 menu()
