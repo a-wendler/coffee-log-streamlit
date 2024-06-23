@@ -4,7 +4,6 @@ from sqlalchemy import create_engine
 from models import Base
 from login import check_user
 
-# dialect+driver://username:password@host:port/database
 db_url = f"{st.secrets.connections.coffee_counter["dialect"]}+{st.secrets.connections.coffee_counter["driver"]}://{st.secrets.connections.coffee_counter["username"]}:{st.secrets.connections.coffee_counter["password"]}@{st.secrets.connections.coffee_counter["host"]}:{st.secrets.connections.coffee_counter["port"]}/{st.secrets.connections.coffee_counter["database"]}"
 # db_url = "sqlite:///coffee_counter.db"
 
@@ -49,6 +48,10 @@ def authenticated_menu():
 
 def unauthenticated_menu():
     # Show a navigation menu for unauthenticated users
+    st.sidebar.divider()
+    setup = st.sidebar.button("Datenbank initialisieren")
+    if setup:
+        setup_db()
     st.sidebar.title("LSB Kaffeeabrechnung")
     st.sidebar.page_link("app.py", label="Start")
     st.sidebar.page_link("pages/register.py", label="Registrieren")
