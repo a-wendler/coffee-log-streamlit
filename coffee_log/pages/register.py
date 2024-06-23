@@ -49,7 +49,7 @@ with st.form(key="add_user", clear_on_submit=True):
     vorname = st.text_input("Vorname")
     name = st.text_input("Nachname")
     email = st.text_input("E-Mail")
-    code = st.text_input("Kennwort")
+    code = st.text_input("Kennwort", type="password")
     submit = st.form_submit_button("Registrieren")
 
 if submit:

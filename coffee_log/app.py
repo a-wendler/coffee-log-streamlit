@@ -66,7 +66,9 @@ with st.form(key="log_coffee", clear_on_submit=True):
         options=list(range(1, 6)),
         key="anzahl_slider",
     )
-    code = st.text_input("Geben Sie Ihr Kennwort ein.", key="code_input")
+    code = st.text_input(
+        "Geben Sie Ihr Kennwort ein.", key="code_input", type="password"
+    )
     submit = st.form_submit_button(
         "Kaffee eintragen", type="primary", on_click=check_user
     )
@@ -96,9 +98,9 @@ st.markdown(
     2. Tragen Sie jeden Kaffee in dieses Tool ein, den Sie trinken.
     3. Erhalten Sie am Monatsende eine Abrechnung und zahlen Sie Ihren Anteil.
     
-    __Warum digital?__ Die Abrechnung macht keinen Aufwand und Sie haben jederzet einen Überblick über Ihre Kaffeeausgaben.
+    __Warum digital?__ Die Abrechnung macht keinen Aufwand und Sie haben jederzeit einen Überblick über Ihre Kaffeeausgaben.
 
-    Ein Kaffee kostet € 1,– für Gäste und € 0,25 für Mitgliede, die sich an der Monatsmiete beteiligen. Wenn Sie Mitglied werden wollen, wenden Sie sich an {st.secrets.admins['rechnung']}.
+    Ein Kaffee kostet € 1,– für Gäste und € 0,25 für Mitglieder, die sich an der Monatsmiete beteiligen. Wenn Sie Mitglied werden wollen, registrieren Sie sich hier und wenden Sie sich an {st.secrets.admins['rechnung']}.
 """
 )
 st.expander("Datenschutz").markdown(

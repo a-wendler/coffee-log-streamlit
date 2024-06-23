@@ -19,7 +19,7 @@ def set_new_password(token):
                 select(User).where(User.token == token, User.status == "active")
             )
             if user:
-                new_password = st.text_input("Neues Kennwort")
+                new_password = st.text_input("Neues Kennwort", type="password")
                 if st.button("Neues Kennwort speichern"):
                     user.code = sha256(new_password.encode("utf-8")).hexdigest()
                     user.token = None
