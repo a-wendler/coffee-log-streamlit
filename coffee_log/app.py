@@ -84,18 +84,7 @@ if "current_user" not in st.session_state:
 
 
 menu()
-
-st.subheader("So funktioniert es:")
-st.markdown(
-    """Die Kaffeemaschine wird von einer Gruppe von Kolleg/-innen gemietet.
-
-Wer sich an der Miete beteiligt, bezahlt einen __monatlichen Grundbetrag__ von derzeit € xx und pro Tasse Kaffee 25 ct.
-            
-Wer als Gast mittrinkt, zahlt € 1 pro Kaffee.
-
-"""
-)
-
+st.header("LSB Kaffeeabrechnung")
 st.subheader("Kaffee trinken")
 with st.form(key="log_coffee", clear_on_submit=True):
     anzahl = st.select_slider(
@@ -126,4 +115,16 @@ with st.expander("Kennwort vergessen?"):
                 st.error(f"Beim Senden der E-Mail ist ein Fehler aufgetreten: {e}")
         else:
             st.error("Fehler beim Zurücksetzen des Passwortes!")
+st.subheader("So funktioniert es:")
+st.markdown(
+    f"""
+    1. Registrieren Sie sich.
+    2. Tragen Sie jeden Kaffee in dieses Tool ein, den Sie trinken.
+    3. Erhalten Sie am Monatsende eine Abrechnung und zahlen Sie Ihren Anteil.
+    
+    __Warum digital?__ Die Abrechnung macht keinen Aufwand und Sie haben jederzet einen Überblick über Ihre Kaffeeausgaben.
+
+    Ein Kaffee kostet € 1,– für Gäste und € 0,25 für Mitgliede, die sich an der Monatsmiete beteiligen. Wenn Sie Mitglied werden wollen, wenden Sie sich an {st.secrets.admins['rechnung']}.
+"""
+)
 # st.write(st.session_state)

@@ -5,7 +5,7 @@ from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
 
-from sqlalchemy import Integer, String, Float, ForeignKey
+from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from sqlalchemy.types import DECIMAL
@@ -31,7 +31,7 @@ class Payment(Base):
 
     __tablename__ = "payments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    betrag: Mapped[Decimal] = mapped_column(DECIMAL(8,2), nullable=False)
+    betrag: Mapped[Decimal] = mapped_column(DECIMAL(8, 2), nullable=False)
     betreff: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     typ: Mapped[str] = mapped_column(String(64), nullable=False)
     ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
@@ -67,11 +67,13 @@ class Invoice(Base):
 
     __tablename__ = "invoices"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    gesamtbetrag: Mapped[Decimal] = mapped_column(DECIMAL(8,2), nullable=False)
+    gesamtbetrag: Mapped[Decimal] = mapped_column(DECIMAL(8, 2), nullable=False)
     kaffee_anzahl: Mapped[int] = mapped_column(Integer, nullable=False)
-    kaffee_preis: Mapped[Decimal] = mapped_column(DECIMAL(8,2), nullable=False)
-    miete: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8,2), nullable=True)
-    payment_betrag: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8,2), nullable=True)
+    kaffee_preis: Mapped[Decimal] = mapped_column(DECIMAL(8, 2), nullable=False)
+    miete: Mapped[Optional[Decimal]] = mapped_column(DECIMAL(8, 2), nullable=True)
+    payment_betrag: Mapped[Optional[Decimal]] = mapped_column(
+        DECIMAL(8, 2), nullable=True
+    )
     monat: Mapped[datetime] = mapped_column(String(64), nullable=False)
     email_versand: Mapped[Optional[datetime]] = mapped_column(String(64), nullable=True)
     bezahlt: Mapped[Optional[datetime]] = mapped_column(String(64), nullable=True)

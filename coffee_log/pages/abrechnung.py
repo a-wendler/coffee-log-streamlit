@@ -1,14 +1,21 @@
 from datetime import datetime
-from typing import List, TypedDict, Optional
+from typing import List, TypedDict, Optional, Union
+from decimal import Decimal
 import pandas as pd
 import streamlit as st
+from sqlalchemy import select, extract, func
 from menu import menu_with_redirect
 from pages.monatsuebersicht import get_first_days_of_last_six_months
 from models import Log, User, Payment, Invoice
-from sqlalchemy import select, extract, func
 
 
-def get_subscription_fee() -> float:
+def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
+    if isinstance(value, Decimal):
+        return value.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
+    return Decimal(value).quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
+
+
+def get_subscription_fee() -> Decimal:
     # Get the number of members
     with conn.session as get_subscription_fee_session:
         num_members_stmt = select(func.count(User.id)).where(User.mitglied == 1)
@@ -16,7 +23,8 @@ def get_subscription_fee() -> float:
 
     if num_members < 1:
         return 0
-    return round(st.secrets.MIETE / num_members, 2)
+    fee = quantize_decimal(st.secrets.MIETE) / num_members
+    return quantize_decimal(fee)
 
 
 def gesamt_abrechnung(datum):
@@ -35,16 +43,15 @@ def gesamt_abrechnung(datum):
         get_coffee_number(monat=datum),
     )
 
-    with conn.session as session:
-        payments = (
-            session.scalars(select(Payment)
+    with conn.session as local_session:
+        payments = local_session.scalars(
+            select(Payment)
             .join(User)
             .where(
                 extract("month", Payment.ts) == datum.month,
                 extract("year", Payment.ts) == datum.year,
-            ))
-            .all()
-        )
+            )
+        ).all()
         payment_list = []
         for payment in payments:
             payment_list.append(
@@ -60,8 +67,10 @@ def gesamt_abrechnung(datum):
     st.subheader("Zahlungen")
     payments_df
     st.write("Verbrauchskosten: €", get_payment_sum(datum))
-    st.write("Miete: €", st.secrets.MIETE)
-    st.write("Gesamtkosten: €", round(get_payment_sum(datum) + st.secrets.MIETE, 2))
+    st.write("Miete: €", quantize_decimal(st.secrets.MIETE))
+    st.write(
+        "Gesamtkosten: €", get_payment_sum(datum) + quantize_decimal(st.secrets.MIETE)
+    )
     st.write("Mitgliederkaffeepreis: €", get_member_coffee_price(datum))
 
 
@@ -136,14 +145,14 @@ def get_payment_sum(month: datetime) -> float:
         )
     if betrag:
         if betrag > 0:
-            return round(betrag, 2)
-    return 0.0
+            return quantize_decimal(betrag)
+    return quantize_decimal("0")
 
 
 def get_payments(month: datetime) -> List[Payment]:
-    with conn.session as session:
+    with conn.session as local_session:
         return (
-            session.query(Payment)
+            local_session.query(Payment)
             .filter(
                 extract("month", Payment.ts) == month.month,
                 extract("year", Payment.ts) == month.year,
@@ -152,7 +161,7 @@ def get_payments(month: datetime) -> List[Payment]:
         )
 
 
-def get_member_coffee_price(month: datetime) -> float:
+def get_member_coffee_price(month: datetime) -> Decimal:
     """
     Ermittelt den Preis für einen Mitgliederkaffee.
     """
@@ -160,8 +169,9 @@ def get_member_coffee_price(month: datetime) -> float:
     guest_coffees = get_coffee_number(monat=month, gruppe="gast")
     payment_sum = get_payment_sum(month)
 
-    gesamtkosten = st.secrets.MIETE + payment_sum
-    return round((gesamtkosten - guest_coffees) / member_coffees, 2)
+    gesamtkosten = quantize_decimal(st.secrets.MIETE) + payment_sum
+    price = (gesamtkosten - guest_coffees) / member_coffees
+    return quantize_decimal(price)
 
 
 class einzelabrechnung_kwargs(TypedDict):
@@ -216,16 +226,16 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
 
         payment_betrag = einzelabrechnung_session.scalar(betrag_stmt)
         if not payment_betrag:
-            payment_betrag = 0.0
+            payment_betrag = quantize_decimal("0")
 
         miete = get_subscription_fee()
 
         if member_status == 1:
             kaffee_preis = get_member_coffee_price(monat) * kaffee_anzahl
-            gesamtbetrag = round(kaffee_preis + miete - payment_betrag, 2)
+            gesamtbetrag = quantize_decimal((kaffee_preis + miete - payment_betrag))
         if member_status == 0:
-            kaffee_preis = kaffee_anzahl * st.secrets.KAFFEEPREIS_GAST
-            gesamtbetrag = round(kaffee_preis - payment_betrag, 2)
+            kaffee_preis = kaffee_anzahl * quantize_decimal(st.secrets.KAFFEEPREIS_GAST)
+            gesamtbetrag = quantize_decimal((kaffee_preis - payment_betrag))
 
     return Invoice(
         kaffee_anzahl=kaffee_anzahl,
@@ -242,21 +252,23 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
 
 def einzelabrechnung_web(datum):
     st.header("Einzelabrechnung")
-    with conn.session as session:
+    with conn.session as local_session:
         user_choice = st.selectbox(
             "Nutzer",
             [
                 user[0].id
-                for user in session.execute(
+                for user in local_session.execute(
                     select(User).filter(User.mitglied == 1)
                 ).all()
             ],
-            format_func=lambda x: session.execute(select(User).filter(User.id == x))
+            format_func=lambda x: local_session.execute(
+                select(User).filter(User.id == x)
+            )
             .first()[0]
             .name,
             key="user",
         )
-        logs = session.execute(
+        logs = local_session.execute(
             select(Log).filter(
                 extract("month", Log.ts) == datum.month,
                 extract("year", Log.ts) == datum.year,
@@ -311,24 +323,25 @@ datum = st.selectbox(
 if datum:
     gesamt_abrechnung(datum)
     st.subheader("Einzelabrechnungen")
-    with conn.session as session:
-        stmt = (
-            select(User)
-            .filter(User.status == "active")
-            .order_by(User.name, User.vorname)
-        )
-        users = session.scalars(stmt).all()
-        abrechnungen_list = []
-        for user in users:
-            abrechnung = einzelabrechnung(monat=datum, user_id=user.id)
-            abrechnungen_list.append(
-                {
-                    "Name": user.name,
-                    "Vorname": user.vorname,
-                    "Monatsbetrag": round(abrechnung.gesamtbetrag, 2),
-                    "Kaffeeanzahl": abrechnung.kaffee_anzahl,
-                }
+    with st.spinner("Einzelabrechnungen werden erstellt …"):
+        with conn.session as session:
+            stmt = (
+                select(User)
+                .filter(User.status == "active")
+                .order_by(User.name, User.vorname)
             )
-        df = pd.DataFrame().from_records(abrechnungen_list)
-        table = st.table(df)
-        st.write("Gesamtsumme:", round(df.Monatsbetrag.sum(), 2))
+            users = session.scalars(stmt).all()
+            abrechnungen_list = []
+            for user in users:
+                abrechnung = einzelabrechnung(monat=datum, user_id=user.id)
+                abrechnungen_list.append(
+                    {
+                        "Name": user.name,
+                        "Vorname": user.vorname,
+                        "Monatsbetrag": quantize_decimal(abrechnung.gesamtbetrag),
+                        "Kaffeeanzahl": abrechnung.kaffee_anzahl,
+                    }
+                )
+            df = pd.DataFrame().from_records(abrechnungen_list)
+            table = st.table(df)
+            st.write("Gesamtsumme:", df.Monatsbetrag.sum())
