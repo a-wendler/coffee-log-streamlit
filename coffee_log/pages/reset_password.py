@@ -1,6 +1,7 @@
 """
 Modul zum Vergeben eines neuen Passwortes, wenn zuvor ein reset_token angefordert wurde.
 """
+
 import time
 from hashlib import sha256
 
@@ -10,12 +11,10 @@ from sqlalchemy import select
 from models import User
 
 
-
 def set_new_password(token):
     """Check if reset_key is valid and ask user for new password."""
     with conn.session as session:
         try:
-            # user = session.query(User).filter(User.token == token, User.status == 'active').first()
             user = session.scalar(
                 select(User).where(User.token == token, User.status == "active")
             )
@@ -27,6 +26,8 @@ def set_new_password(token):
                     session.commit()
                     st.success("Kennwort wurde geändert!")
                     st.query_params.clear()
+                    time.sleep(3)
+                    st.switch_page("app.py")
         except:
             st.error("Ungültiger Link!")
 
@@ -41,6 +42,3 @@ if "token" in st.query_params:
         set_new_password(st.query_params.token)
 else:
     st.error("Ungültiger Link!")
-
-time.sleep(3)
-st.switch_page("app.py")

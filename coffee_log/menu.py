@@ -36,10 +36,10 @@ def authenticated_menu():
             "pages/account.py",
             label="Kontoübersicht",
         )
-    st.sidebar.divider()
-    setup = st.sidebar.button("Datenbank initialisieren")
-    if setup:
-        setup_db()
+        st.sidebar.divider()
+        setup = st.sidebar.button("Datenbank initialisieren")
+        if setup:
+            setup_db()
     st.sidebar.divider()
     st.sidebar.write(f"Eingeloggt als: {st.session_state.current_user['vorname']} {st.session_state.current_user['name']}")
     

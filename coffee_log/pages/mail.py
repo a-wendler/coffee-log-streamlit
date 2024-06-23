@@ -28,7 +28,7 @@ def send_activation_email(receiver_email, token):
     text = f"""
     Herzlich willkommen bei der Kaffeeabrechnung der LSB! Bitte klicken Sie auf den folgenden Link, um Ihr Konto zu aktivieren:
 
-    http://localhost:8501/activate/?token={token}
+    https://lsbkaffee.streamlit.app/activate?token={token}
 
     Wenn Sie den Link nicht anklicken können, kopieren Sie ihn bitte in die Adresszeile Ihres Browsers.
 
@@ -50,7 +50,7 @@ def send_reset_email(receiver_email, token):
     text = f"""
     Klicken Sie auf den folgenden Link und geben Sie ein neues Passwort ein:
 
-    http://localhost:8501/reset_password/?token={token}
+    https://lsbkaffee.streamlit.app/reset_password?token={token}
 
     Wenn Sie den Link nicht anklicken können, kopieren Sie ihn bitte in die Adresszeile Ihres Browsers.
 

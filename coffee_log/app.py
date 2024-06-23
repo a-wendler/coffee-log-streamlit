@@ -82,7 +82,7 @@ with st.expander("Kennwort vergessen?"):
         if reset_key:
             try:
                 send_reset_email(email, reset_key)
-                st.write(
+                st.success(
                     f"Ein Link zum Zurücksetzen Ihres Kennworts wurde an {email} gesendet."
                 )
             except Exception as e:
@@ -92,7 +92,7 @@ with st.expander("Kennwort vergessen?"):
 st.subheader("So funktioniert es:")
 st.markdown(
     f"""
-    1. Registrieren Sie sich.
+    1. [Registrieren](https://lsbkaffee.streamlit.app/register) Sie sich.
     2. Tragen Sie jeden Kaffee in dieses Tool ein, den Sie trinken.
     3. Erhalten Sie am Monatsende eine Abrechnung und zahlen Sie Ihren Anteil.
     
@@ -100,5 +100,8 @@ st.markdown(
 
     Ein Kaffee kostet € 1,– für Gäste und € 0,25 für Mitgliede, die sich an der Monatsmiete beteiligen. Wenn Sie Mitglied werden wollen, wenden Sie sich an {st.secrets.admins['rechnung']}.
 """
+)
+st.expander("Datenschutz").markdown(
+    f"Diese App speichert nur die Daten, die Sie eingeben. Die Daten werden ausschließlich zum Aufteilen der Unkosten für die Kaffeemaschine im 3. OG verwendet. Die Daten sind auf einem Server beim deutschen Anbieter Hetzner in Nürnberg gespeichert. Der Zugriff auf die Daten ist nur für die Administratoren der Kaffeekasse möglich. Sie können jederzeit einen vollständigen Einblick in Ihre Daten erhalten und die Löschung Ihrer Daten verlangen. Bitte wenden Sie sich dazu an {st.secrets.admins['technik']}."
 )
 # st.write(st.session_state)
