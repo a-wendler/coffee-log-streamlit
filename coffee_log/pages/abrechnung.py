@@ -322,6 +322,27 @@ def einzelabrechnung_web(datum):
     st.write("Anzahl Kaffees:", anzahl_kaffees)
     st.write("Miete anteilig:", miete_anteilig)
 
+def monatsbuchung(datum):
+    with conn.session as local_session:
+        try:
+            payments = local_session.scalars(select(Payment).where(
+                extract("month", Payment.ts) == datum.month,
+                extract("year", Payment.ts) == datum.year,
+                User = invoice.user,
+            )).all()
+            for invoice in monats_liste:
+                invoice.monat = datum
+                invoice.payments = payments
+                invoice.ts = datetime.now()
+                local_session.add(invoice)
+            local_session.commit()
+            st.success("Buchung erfolgreich")
+        except Exception as e:
+            st.error("Fehler bei der Buchung")
+            st.error(e)
+            local_session.rollback()
+        
+
 
 # Streamlit app layout
 menu_with_redirect()

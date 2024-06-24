@@ -18,7 +18,7 @@ def logout():
 
 def authenticated_menu():
     # Show a navigation menu for authenticated users
-    st.sidebar.title("LSB Kaffeeabrechnung")
+    st.sidebar.title("LSB Kaffeeabrechnung DEV")
     st.sidebar.page_link("app.py", label="Start")
     st.sidebar.page_link("pages/monatsuebersicht.py", label="Monatsübersicht")
     if st.session_state.current_user["role"] in ["admin", "super-admin"]:
@@ -48,14 +48,14 @@ def authenticated_menu():
 
 def unauthenticated_menu():
     # Show a navigation menu for unauthenticated users
-    st.sidebar.title("LSB Kaffeeabrechnung")
+    st.sidebar.title("LSB Kaffeeabrechnung DEV")
     st.sidebar.page_link("app.py", label="Start")
     st.sidebar.page_link("pages/register.py", label="Registrieren")
     st.sidebar.divider()
     st.sidebar.write("Nicht eingeloggt")
     with st.sidebar.popover("Login"):
         with st.form(key="login_form", clear_on_submit=True):
-            code_input = st.text_input("Kennwort", type="password", key="code_login")
+            code_login = st.text_input("Kennwort", type="password", key="code_login")
             button = st.form_submit_button("Login", on_click=check_user)
         if button:
             st.sidebar.success("Erfolgreich eingeloggt!")
