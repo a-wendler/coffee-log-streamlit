@@ -1,5 +1,7 @@
 import streamlit as st
-
+from sqlalchemy import select
+from models import Invoice, User
+from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 
@@ -63,3 +65,58 @@ def send_reset_email(receiver_email, token):
         return True
     except Exception as e:
         return e
+
+
+def send_invoice(invoice_id):
+    # Get invoice
+    with conn.session as local_session:
+        invoice = local_session.scalar(
+            select(Invoice).join(User).where(Invoice.id == invoice_id)
+        )
+        receiver_email = invoice.user.email
+        monat = datetime.strptime(invoice.monat, "%Y-%m-%d %H:%M:%S")
+        monat = uebersetzungen[monat.strftime("%B")] + " " + monat.strftime("%Y")
+        subject = f"LSB Kaffeeabrechnung {monat}"
+        text = f"""
+Ihre Kaffeeabrechnung für {monat}:
+
+Getrunkene Tassen Kaffee: {invoice.kaffee_anzahl}
+Preis für Kaffee: {invoice.kaffee_preis} €"""
+        if invoice.user.mitglied:
+            text += f"""
+Mietanteil: {invoice.miete} €"""
+        if invoice.payment_betrag:
+            text += f"""         
+Guthaben für Einkäufe etc.: {invoice.payment_betrag} €
+"""
+        text += f"""
+=========================================================
+Gesamtbetrag: {invoice.gesamtbetrag} €
+
+Bitte überweisen Sie den Betrag an {st.secrets.BANKVERBINDUNG}.
+"""
+        invoice.email_versand = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        local_session.commit()
+
+    try:
+        send_email(receiver_email, text, subject)
+        return "Rechnung erfolgreich versandt!"
+    except Exception as e:
+        return e
+
+
+conn = st.connection("coffee_counter", type="sql")
+uebersetzungen = {
+    "January": "Januar",
+    "February": "Februar",
+    "March": "März",
+    "April": "April",
+    "May": "Mai",
+    "June": "Juni",
+    "July": "Juli",
+    "August": "August",
+    "September": "September",
+    "October": "Oktober",
+    "November": "November",
+    "December": "Dezember",
+}

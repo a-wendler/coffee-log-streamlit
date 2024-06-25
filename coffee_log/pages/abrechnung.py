@@ -6,6 +6,7 @@ import streamlit as st
 from sqlalchemy import select, extract, func
 from menu import menu_with_redirect
 from pages.monatsuebersicht import get_first_days_of_last_six_months
+from pages.mail import send_invoice
 from models import Log, User, Payment, Invoice
 
 
@@ -178,7 +179,7 @@ def get_member_coffee_price(month: datetime) -> Decimal:
 
 
 class einzelabrechnung_kwargs(TypedDict):
-    monat: Optional[datetime] = datetime.now()
+    datum: Optional[datetime] = datetime.now()
     user_id: int
 
 
@@ -194,19 +195,19 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
     returns: Invoice-Objekt
     """
     # Default values für kwargs
-    monat = kwargs.get("monat", datetime.now())
+    datum = kwargs.get("datum", datetime.now())
     user_id = kwargs.get("user_id")
 
     if not user_id:
         raise ValueError("Argument 'user_id' muss übergeben werden")
 
     # Checken, ob die Argumente die richtigen Typen haben
-    if not isinstance(monat, datetime):
+    if not isinstance(datum, datetime):
         raise ValueError("Argument 'monat' muss ein datetime-Objekt sein")
     if not isinstance(user_id, int):
         raise ValueError("Argument 'user_id' muss ein Integer sein")
 
-    kaffee_anzahl = get_coffee_number(monat=monat, user_id=user_id)
+    kaffee_anzahl = get_coffee_number(monat=datum, user_id=user_id)
 
     with conn.session as einzelabrechnung_session:
         user = einzelabrechnung_session.scalar(select(User).where(User.id == user_id))
@@ -214,16 +215,16 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
         member_status = user.mitglied
 
         payments_stmt = select(Payment).where(
-            extract("month", Payment.ts) == monat.month,
-            extract("year", Payment.ts) == monat.year,
+            extract("month", Payment.ts) == datum.month,
+            extract("year", Payment.ts) == datum.year,
             Payment.user_id == user_id,
         )
 
-        payments = einzelabrechnung_session.scalar(payments_stmt)
+        payments = einzelabrechnung_session.scalars(payments_stmt).all()
 
         betrag_stmt = select(func.sum(Payment.betrag)).where(
-            extract("month", Payment.ts) == monat.month,
-            extract("year", Payment.ts) == monat.year,
+            extract("month", Payment.ts) == datum.month,
+            extract("year", Payment.ts) == datum.year,
             Payment.user_id == user_id,
         )
 
@@ -234,7 +235,7 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
         miete = get_subscription_fee()
 
         if member_status == 1:
-            kaffee_preis = get_member_coffee_price(monat) * kaffee_anzahl
+            kaffee_preis = get_member_coffee_price(datum) * kaffee_anzahl
             gesamtbetrag = quantize_decimal((kaffee_preis + miete - payment_betrag))
         if member_status == 0:
             kaffee_preis = kaffee_anzahl * quantize_decimal(st.secrets.KAFFEEPREIS_GAST)
@@ -255,25 +256,25 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
 
 
 class monatsliste_kwargs(TypedDict):
-    monat: Optional[datetime] = datetime.now()
+    datum: Optional[datetime] = datetime.now()
 
 
 @st.cache_data
 def monatsliste(**kwargs: monatsliste_kwargs):
     # Default values für kwargs
-    monat = kwargs.get("monat", datetime.now())
+    datum = kwargs.get("datum", datetime.now())
 
     # Checken, ob die Argumente die richtigen Typen haben
-    if not isinstance(monat, datetime):
+    if not isinstance(datum, datetime):
         raise ValueError("Argument 'monat' muss ein datetime-Objekt sein")
 
-    with conn.session as session:
+    with conn.session as local_session:
         stmt = (
             select(User)
             .filter(User.status == "active")
             .order_by(User.name, User.vorname)
         )
-        users = session.scalars(stmt).all()
+        users = local_session.scalars(stmt).all()
         abrechnungen_list = []
         for user in users:
             rechnung = einzelabrechnung(monat=datum, user_id=user.id)
@@ -325,28 +326,80 @@ def einzelabrechnung_web(datum):
 def monatsbuchung(datum):
     with conn.session as local_session:
         try:
-            payments = local_session.scalars(select(Payment).where(
-                extract("month", Payment.ts) == datum.month,
-                extract("year", Payment.ts) == datum.year,
-                User = invoice.user,
-            )).all()
+
             for invoice in monats_liste:
-                invoice.monat = datum
+                payments = local_session.scalars(select(Payment).where(
+                        extract("month", Payment.ts) == datum.month,
+                        extract("year", Payment.ts) == datum.year,
+                        Payment.user == invoice.user,
+                    )).all()
+                # st.write(type(payments))
                 invoice.payments = payments
+                invoice.monat = datum
                 invoice.ts = datetime.now()
                 local_session.add(invoice)
+            
+            reichheim = local_session.scalar(select(User).where(User.name == "Reichheim"))
+            miete = Payment(
+                betrag=quantize_decimal(st.secrets.MIETE),
+                betreff=f"Miete {datum.strftime('%B %Y')}",
+                typ="Miete",
+                ts=datum,
+                user=reichheim,
+                user_id=reichheim.id,
+            )
+            local_session.add(miete)
             local_session.commit()
             st.success("Buchung erfolgreich")
         except Exception as e:
             st.error("Fehler bei der Buchung")
             st.error(e)
             local_session.rollback()
-        
 
+@st.experimental_dialog("Monatsabrechnung erstellen?")
+def confirm_monatsabrechnung():
+    st.write("Wollen Sie die Monatsabrechnung wirklich erstellen und die Rechnungen einbuchen?")
+    if st.button("Ja"):
+        monatsbuchung(datum)
+    if st.button("Nein"):
+        st.rerun()
+
+def send_invoice_mail(id: int):
+    mailversand = send_invoice(id)
+    
+    if mailversand:
+        st.session_state.invoice_status[id] = mailversand
+    else:
+        st.session_state.invoice_status[id] = "Fehler beim Versand der E-Mail" 
+
+def send_all_invoices(liste: List[Invoice]):
+    for invoice in liste:
+        if not invoice.email_versand:
+            mailversand = send_invoice(invoice.id)
+            if mailversand:
+                st.session_state.invoice_status[invoice.id] = mailversand
+            else:
+                st.session_state.invoice_status[invoice.id] = "Fehler beim Versand der E-Mail"
+
+@st.experimental_dialog("Alle Rechnungen senden?")
+def confirm_send_all_invoices(monats_liste: List[Invoice]):
+    st.write("Wollen Sie wirklich alle Rechnungen senden?\n\nBereits versandte Mails werden nicht erneut versandt.")
+    if st.button("E-Mails versenden"):
+        send_all_invoices(monats_liste)
+    if st.button("Abbrechen"):
+        st.rerun()
+
+def mark_invoice_paid(id: int):
+    with conn.session as session:
+        invoice = session.scalar(select(Invoice).where(Invoice.id == id))
+        invoice.bezahlt = datetime.now()
+        session.commit()
+        st.session_state.invoice_status[id] = "Rechnung als bezahlt markiert"
 
 # Streamlit app layout
 menu_with_redirect()
-
+if "invoice_status" not in st.session_state:
+    st.session_state.invoice_status = {}
 conn = st.connection("coffee_counter", type="sql")
 st.subheader("Abrechnung")
 
@@ -373,25 +426,80 @@ datum = st.selectbox(
 
 if datum:
     gesamt_abrechnung(datum)
+    st.write(datum)
     st.subheader("Einzelabrechnungen")
-    with st.spinner("Einzelabrechnungen werden erstellt …"):
-        monats_liste = monatsliste(monat=datum)
-        show_liste = []
-        for abrechnung in monats_liste:
-            show_liste.append(
-                {
-                    "Name": abrechnung.user.name,
-                    "Monatsbetrag": quantize_decimal(abrechnung.gesamtbetrag),
-                    "Kaffeeanzahl": abrechnung.kaffee_anzahl,
-                    "Gutschriften": abrechnung.payment_betrag,
-                }
+    with conn.session as session:
+        anzahl_invoices = session.scalar(
+            select(func.count(Invoice.id)).where(
+                extract("month", Invoice.monat) == datum.month,
+                extract("year", Invoice.monat) == datum.year,
             )
-
-        df = pd.DataFrame().from_records(show_liste)
-        table = st.dataframe(
-            df,
-            column_config={
-                "Monatsbetrag": st.column_config.NumberColumn(format="€ %g")
-            },
         )
-        st.write("Gesamtsumme:", df.Monatsbetrag.sum())
+        st.write("Anzahl gebuchte Einzelabrechnungen:", anzahl_invoices)
+    if anzahl_invoices < 1:
+        with st.spinner("Einzelabrechnungen werden erstellt …"):
+            monats_liste = monatsliste(datum=datum)
+            show_liste = []
+            for abrechnung in monats_liste:
+                show_liste.append(
+                    {
+                        "Name": abrechnung.user.name,
+                        "Monatsbetrag": quantize_decimal(abrechnung.gesamtbetrag),
+                        "Kaffeeanzahl": abrechnung.kaffee_anzahl,
+                        "Gutschriften": abrechnung.payment_betrag,
+                    }
+                )
+
+            df = pd.DataFrame().from_records(show_liste)
+            table = st.dataframe(
+                df,
+                column_config={
+                    "Monatsbetrag": st.column_config.NumberColumn(format="€ %g")
+                },
+            )
+            st.write("Gesamtsumme:", df.Monatsbetrag.sum())
+
+            monatsabrechnung = st.button(f"Monatsabrechnung {uebersetzungen[datum.strftime("%B")]} erstellen")
+            if monatsabrechnung:
+                confirm_monatsabrechnung()
+    elif anzahl_invoices > 0:
+        st.write(
+            f"Abrechnungen für {uebersetzungen[datum.strftime('%B')]} wurden bereits gebucht"
+        )
+        with conn.session as session:
+            monats_liste = session.scalars(
+                select(Invoice).where(
+                    extract("month", Invoice.monat) == datum.month,
+                    extract("year", Invoice.monat) == datum.year,
+                )
+            ).all()
+            show_liste = []
+            for abrechnung in monats_liste:
+                if abrechnung.bezahlt:
+                    bezahlt_icon = "✅"
+                else:
+                    bezahlt_icon = "❌"
+                if abrechnung.email_versand:
+                    email_icon = "📧"
+                else:
+                    email_icon = ""
+                
+                with st.expander(label=f"{bezahlt_icon} {email_icon} {abrechnung.user.name}"):
+                    st.write("Monatsbetrag:", abrechnung.gesamtbetrag)
+                    st.write("Kaffeeanzahl:", abrechnung.kaffee_anzahl)
+                    st.write("Gutschriften:", abrechnung.payment_betrag)
+                    st.write("Erstellt:", abrechnung.ts)
+                    st.write("E-Mailversand:", abrechnung.email_versand)
+                    st.write("Bezahlt:", abrechnung.bezahlt)
+                    st.write("Zahlungen:")
+                    for payment in abrechnung.payments:
+                        st.write(payment.betrag, payment.betreff, payment.ts)
+
+                    st.button("Rechnung senden", key=f"invoice_{abrechnung.id}",on_click=send_invoice_mail, args=(abrechnung.id,))
+                    st.write(st.session_state.invoice_status.get(abrechnung.id, ""))
+
+                    st.button("Rechnung als bezahlt markieren", key=f"paid_{abrechnung.id}", on_click=mark_invoice_paid, args=(abrechnung.id,))
+            
+            st.button("Alle Rechnungen senden", key="send_all", on_click=confirm_send_all_invoices, args=(monats_liste,))
+
+        

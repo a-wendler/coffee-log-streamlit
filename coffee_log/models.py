@@ -80,4 +80,4 @@ class Invoice(Base):
     ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="invoices")
-    payments: Mapped[Optional[Payment]] = relationship(back_populates="invoice")
+    payments: Mapped[List[Payment]] = relationship(back_populates="invoice")

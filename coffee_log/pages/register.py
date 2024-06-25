@@ -37,7 +37,7 @@ def add_user(code, name, vorname, email):
                 st.error(f"Beim Senden der Aktivierungsmail ist ein Fehler aufgetreten. Bitte wenden Sie sich an {st.secrets.admins['technik']}: {e}")
     except Exception as e:
         st.error(f"Nutzer konnte nicht registriert werden. Wurde die E-Mailadresse bereits registriert? Versuchen Sie ein anderes Kennwort.")
-        st.error(e)
+        # st.error(e)
         session.rollback()
     
 
@@ -57,10 +57,10 @@ conn = st.connection("coffee_counter", type="sql")
 
 st.subheader("Neuen Nutzer für die Kaffeeabrechnung hinzufügen")
 with st.form(key="add_user"):
-    vorname = st.text_input("Vorname *")
-    name = st.text_input("Nachname *")
-    email = st.text_input("E-Mail *")
-    code = st.text_input("Kennwort *", type="password")
+    vorname = st.text_input("Vorname")
+    name = st.text_input("Nachname")
+    email = st.text_input("E-Mail")
+    code = st.text_input("Kennwort", type="password")
     confirm_code = st.text_input("Kennwort bestätigen", type="password")
     st.write("Alle Felder sind Pflichtfelder.")
     submit = st.form_submit_button("Registrieren")
