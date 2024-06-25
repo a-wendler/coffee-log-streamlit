@@ -3,7 +3,7 @@ from typing import List, TypedDict, Optional, Union
 from decimal import Decimal
 import pandas as pd
 import streamlit as st
-from sqlalchemy import select, extract, func
+from sqlalchemy import select, extract, func, or_
 from menu import menu_with_redirect
 from pages.monatsuebersicht import get_first_days_of_last_six_months
 from pages.mail import send_invoice
@@ -51,6 +51,11 @@ def gesamt_abrechnung(datum):
             .where(
                 extract("month", Payment.ts) == datum.month,
                 extract("year", Payment.ts) == datum.year,
+                or_(
+                    Payment.typ == "Einkauf",
+                    Payment.typ == "Korrektur",
+                    Payment.typ == "Auszahlung",
+                ),
             )
         ).all()
         payment_list = []
@@ -385,6 +390,17 @@ def mark_invoice_paid(id: int):
     with conn.session as session:
         invoice = session.scalar(select(Invoice).where(Invoice.id == id))
         invoice.bezahlt = datetime.now()
+        monat = datetime.strptime(invoice.monat, "%Y-%m-%d %H:%M:%S")
+        monat = uebersetzungen[monat.strftime("%B")] + " " + monat.strftime("%Y")
+        payment = Payment(
+            betrag=invoice.gesamtbetrag,
+            betreff=f"Rechnung {monat}",
+            typ="Einzahlung",
+            ts=datetime.now(),
+            user_id=invoice.user_id,
+            invoice_id=invoice.id,
+        )
+        session.add(payment)
         session.commit()
         st.session_state.invoice_status[id] = "Rechnung als bezahlt markiert"
 
@@ -493,5 +509,4 @@ if datum:
                     st.button("Rechnung als bezahlt markieren", key=f"paid_{abrechnung.id}", on_click=mark_invoice_paid, args=(abrechnung.id,))
             
             st.button("Alle Rechnungen senden", key="send_all", on_click=send_all_invoices, args=(monats_liste,))
-
-        
+            st.write("Wenn ein Nutzer schon eine Rechnung per E-Mail erhalten hat, wird sie über diesen Button nicht noch einmal versandt. Individueller Neuversand ist in den jeweiligen Rechnungs-Boxen möglich.")
