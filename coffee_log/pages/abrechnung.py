@@ -381,14 +381,6 @@ def send_all_invoices(liste: List[Invoice]):
             else:
                 st.session_state.invoice_status[invoice.id] = "Fehler beim Versand der E-Mail"
 
-@st.experimental_dialog("Alle Rechnungen senden?")
-def confirm_send_all_invoices(monats_liste: List[Invoice]):
-    st.write("Wollen Sie wirklich alle Rechnungen senden?\n\nBereits versandte Mails werden nicht erneut versandt.")
-    if st.button("E-Mails versenden"):
-        send_all_invoices(monats_liste)
-    if st.button("Abbrechen"):
-        st.rerun()
-
 def mark_invoice_paid(id: int):
     with conn.session as session:
         invoice = session.scalar(select(Invoice).where(Invoice.id == id))
@@ -500,6 +492,6 @@ if datum:
 
                     st.button("Rechnung als bezahlt markieren", key=f"paid_{abrechnung.id}", on_click=mark_invoice_paid, args=(abrechnung.id,))
             
-            st.button("Alle Rechnungen senden", key="send_all", on_click=confirm_send_all_invoices, args=(monats_liste,))
+            st.button("Alle Rechnungen senden", key="send_all", on_click=send_all_invoices, args=(monats_liste,))
 
         
