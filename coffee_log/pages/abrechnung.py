@@ -6,7 +6,6 @@ import streamlit as st
 from sqlalchemy import select, extract, func, or_
 from menu import menu_with_redirect
 from pages.monatsuebersicht import get_first_days_of_last_six_months
-from pages.mail import send_invoice
 from models import Log, User, Payment, Invoice
 
 
@@ -223,6 +222,11 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
             extract("month", Payment.ts) == datum.month,
             extract("year", Payment.ts) == datum.year,
             Payment.user_id == user_id,
+            or_(
+                Payment.typ == "Einkauf",
+                Payment.typ == "Korrektur",
+                Payment.typ == "Auszahlung",
+            )
         )
 
         payments = einzelabrechnung_session.scalars(payments_stmt).all()
@@ -231,6 +235,11 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
             extract("month", Payment.ts) == datum.month,
             extract("year", Payment.ts) == datum.year,
             Payment.user_id == user_id,
+            or_(
+                Payment.typ == "Einkauf",
+                Payment.typ == "Korrektur",
+                Payment.typ == "Auszahlung",
+            )
         )
 
         payment_betrag = einzelabrechnung_session.scalar(betrag_stmt)
@@ -285,48 +294,6 @@ def monatsliste(**kwargs: monatsliste_kwargs):
             rechnung = einzelabrechnung(monat=datum, user_id=user.id)
             abrechnungen_list.append(rechnung)
         return abrechnungen_list
-
-
-def einzelabrechnung_web(datum):
-    st.header("Einzelabrechnung")
-    with conn.session as local_session:
-        user_choice = st.selectbox(
-            "Nutzer",
-            [
-                user[0].id
-                for user in local_session.execute(
-                    select(User).filter(User.mitglied == 1)
-                ).all()
-            ],
-            format_func=lambda x: local_session.execute(
-                select(User).filter(User.id == x)
-            )
-            .first()[0]
-            .name,
-            key="user",
-        )
-        logs = local_session.execute(
-            select(Log).filter(
-                extract("month", Log.ts) == datum.month,
-                extract("year", Log.ts) == datum.year,
-                Log.user_id == user_choice,
-            )
-        ).all()
-        log_list = []
-        for log in logs:
-            log_list.append(
-                {
-                    "Datum": log[0].ts,
-                    "Anzahl": log[0].anzahl,
-                }
-            )
-        logs_df = pd.DataFrame().from_records(log_list)
-        st.write(logs_df)
-    anzahl_kaffees = logs_df.Anzahl.sum()
-    miete_anteilig = get_subscription_fee()
-
-    st.write("Anzahl Kaffees:", anzahl_kaffees)
-    st.write("Miete anteilig:", miete_anteilig)
 
 def monatsbuchung(datum):
     with conn.session as local_session:
@@ -481,7 +448,7 @@ if datum:
                     extract("year", Invoice.monat) == datum.year,
                 )
             ).all()
-            show_liste = []
+            
             for abrechnung in monats_liste:
                 if abrechnung.bezahlt:
                     bezahlt_icon = "✅"
@@ -503,10 +470,10 @@ if datum:
                     for payment in abrechnung.payments:
                         st.write(payment.betrag, payment.betreff, payment.ts)
 
-                    st.button("Rechnung senden", key=f"invoice_{abrechnung.id}",on_click=send_invoice_mail, args=(abrechnung.id,))
+                    st.button("Rechnung senden", key=f"invoice_{abrechnung.id}",on_click=abrechnung.send_invoice_mail, args=(session,))
                     st.write(st.session_state.invoice_status.get(abrechnung.id, ""))
 
-                    st.button("Rechnung als bezahlt markieren", key=f"paid_{abrechnung.id}", on_click=mark_invoice_paid, args=(abrechnung.id,))
+                    st.button("Rechnung als bezahlt markieren", key=f"paid_{abrechnung.id}", on_click=abrechnung.mark_as_paid, args=(session,))
             
             st.button("Alle Rechnungen senden", key="send_all", on_click=send_all_invoices, args=(monats_liste,))
             st.write("Wenn ein Nutzer schon eine Rechnung per E-Mail erhalten hat, wird sie über diesen Button nicht noch einmal versandt. Individueller Neuversand ist in den jeweiligen Rechnungs-Boxen möglich.")

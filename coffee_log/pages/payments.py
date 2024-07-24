@@ -66,7 +66,7 @@ with st.form(key="payment_form", clear_on_submit=True):
     betreff = st.text_input("Betreff", key="betreff")
     typ = st.selectbox(
         "Typ",
-        ["Einkauf", "Rücklage", "Korrektur", "Auszahlung", "Einzahlung", "Miete"],
+        ["Einkauf", "Rücklage", "Korrektur", "Auszahlung", "Einzahlung"],
         key="typ",
     )
     betrag = st.number_input("Betrag", key="betrag")

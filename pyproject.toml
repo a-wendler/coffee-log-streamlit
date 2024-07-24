@@ -10,6 +10,7 @@ python = "^3.12"
 streamlit = "^1.36.0"
 SQLAlchemy = "^2.0.30"
 pymysql = "^1.1.1"
+loguru = "^0.7.2"
 
 
 [build-system]
