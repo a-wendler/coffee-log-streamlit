@@ -1,7 +1,10 @@
-from models import User
 from hashlib import sha256
+
 import streamlit as st
 from loguru import logger
+from sqlalchemy import select
+
+from database.models import User
 
 
 def check_user(conn):
@@ -21,17 +24,15 @@ def check_user(conn):
                 )
                 .first()
             )
-            st.session_state.current_user["name"] = user.name
-            st.session_state.current_user["vorname"] = user.vorname
-            st.session_state.current_user["id"] = user.id
-            if user.admin:
-                st.session_state.current_user["role"] = "admin"
-            else:
-                st.session_state.current_user["role"] = "user"
+            
+            # st.session_state.current_user["name"] = user.name
+            # st.session_state.current_user["vorname"] = user.vorname
+            # st.session_state.current_user["id"] = user.id
+            # if user.admin:
+            #     st.session_state.current_user["role"] = "admin"
+            # else:
+            #     st.session_state.current_user["role"] = "user"
             st.session_state.user = user
         except Exception as e:
             logger.error(f"Login error: {e}")
             st.error("Fehler beim Login!")
-
-
-# conn = st.connection("coffee_counter", type="sql")

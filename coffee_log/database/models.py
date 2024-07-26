@@ -6,7 +6,7 @@ from decimal import Decimal
 from datetime import datetime
 from loguru import logger
 
-from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy import Integer, String, ForeignKey, select, extract, func
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from sqlalchemy.types import DECIMAL
@@ -30,8 +30,12 @@ class Log(Base):
     user: Mapped["User"] = relationship(back_populates="logs")
 
     def save(self, session):
-        session.add(self)
-        session.commit()
+        try:
+            session.add(self)
+            session.commit()
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern eines Log-Eintrags: {e}")
+            session.rollback()
 
 
 class Payment(Base):
@@ -71,6 +75,21 @@ class User(Base):
     payments: Mapped[List[Payment]] = relationship(back_populates="user")
     invoices: Mapped[List["Invoice"]] = relationship(back_populates="user")
 
+    def get_anzahl_monatskaffees(self, datum: datetime, conn) -> int: 
+        if not isinstance(datum, datetime):
+            raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
+        with conn.session as session:
+            coffee_number_stmt = select(func.sum(Log.anzahl)).where(
+            extract("month", Log.ts) == datum.month,
+            extract("year", Log.ts) == datum.year,
+            Log.user_id == self.id,
+        )
+
+        kaffeemenge = session.scalar(coffee_number_stmt)
+        if kaffeemenge:
+            if kaffeemenge > 0:
+                return kaffeemenge
+        return 0
 
 class Invoice(Base):
     """Model für eine Rechnung"""

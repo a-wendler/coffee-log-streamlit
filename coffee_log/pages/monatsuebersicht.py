@@ -2,8 +2,9 @@ from datetime import datetime
 import streamlit as st
 import pandas as pd
 from sqlalchemy import select
+
 from menu import menu_with_redirect
-from models import User
+from database.models import User
 
 
 def get_first_days_of_last_six_months():
@@ -65,11 +66,11 @@ def monatsuebersicht():
                 f"Gesamtanzahl Kaffees im {uebersetzungen[monat.strftime('%B')]+ ' ' + monat.strftime('%Y')}: {df['Anzahl'].sum()}"
             )
 
+if __name__ == "__main__":
+    # Streamlit app layout
+    # Initialize the database
+    menu_with_redirect()
+    conn = st.connection("coffee_counter", type="sql")
 
-# Streamlit app layout
-# Initialize the database
-menu_with_redirect()
-conn = st.connection("coffee_counter", type="sql")
-
-st.subheader("Monatsübersicht")
-monatsuebersicht()
+    st.subheader("Monatsübersicht")
+    monatsuebersicht()

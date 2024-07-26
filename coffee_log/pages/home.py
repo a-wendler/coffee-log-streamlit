@@ -5,14 +5,14 @@ from datetime import datetime
 import streamlit as st
 from loguru import logger
 
-from models import Log, User
+from database.models import Log, User
 from menu import menu
 from login import check_user
 from pages.mail import send_reset_email
 
-def reset_password(email):
-    """Write reset_key to users-table.
-    returns: reset_key to reset the password"""
+def reset_password(email, conn):
+    """Write reset-token to users-table.
+    returns: reset-token or None"""
     token = "reset_" + sha256(os.urandom(60)).hexdigest()
     with conn.session as session:
         try:
@@ -24,13 +24,14 @@ def reset_password(email):
             user.token = token
             session.commit()
         except Exception as e:
+            logger.error(f"Fehler beim Passwortreset: {e}")
             session.rollback()
             return None
     return token
 
 
 # Function to log a coffee
-def log_coffee():
+def log_coffee(conn):
     """Log a coffee entry."""
     if "user" in st.session_state:
         with conn.session as session:
@@ -51,12 +52,14 @@ def log_coffee():
                 logger.error(
                     f"Kaffee konnte nicht eingetragen werden {log.user.name}: {e}"
                 )
-        del st.session_state.user
     else:
         st.error("Ungültiges Kennwort oder Nutzerkonto nicht aktiviert!")
 
-st.header("☕ LSB Kaffeeabrechnung")
+# st.write(st.session_state)
 conn = st.connection("coffee_counter", type="sql")
+
+st.header("☕ LSB Kaffeeabrechnung")
+
 menu()
 st.subheader("Kaffee trinken")
 with st.form(key="log_coffee", clear_on_submit=True):
@@ -73,13 +76,13 @@ with st.form(key="log_coffee", clear_on_submit=True):
     )
 
 if submit:
-    log_coffee()
+    log_coffee(conn)
 
 with st.expander("Kennwort vergessen?"):
     st.subheader("Kennwort zurücksetzen")
     email = st.text_input("Geben Sie Ihre E-Mail-Adresse ein:")
     if st.button("Kennwort zurücksetzen"):
-        reset_key = reset_password(email)
+        reset_key = reset_password(email, conn)
         if reset_key:
             try:
                 send_reset_email(email, reset_key)

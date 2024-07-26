@@ -7,7 +7,7 @@ import re
 
 import streamlit as st
 
-from models import User
+from database.models import User
 from menu import menu
 from pages.mail import send_activation_email
 

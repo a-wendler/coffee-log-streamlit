@@ -1,14 +1,14 @@
-from models import User, Log
 from datetime import datetime
 from hashlib import sha256
 import random
+
 import streamlit as st
 
+from database.models import User, Log
 
-def test_data_user():
+
+def test_data_user(conn):
     user_list = []
-    population = [0, 1]
-    weights = [0.8, 0.2]
     for i in range(1, 19):
         # Mitglieder
         user_list.append(
@@ -53,7 +53,7 @@ def test_data_user():
         session.commit()
 
 
-def test_data_log():
+def test_data_log(conn):
     log_list = []
     for monat in range(1, 7):
         for user in range(1, 40):
@@ -81,14 +81,15 @@ def test_data_log():
         session.add_all(log_list)
         session.commit()
 
+st.write("hello")
 
 conn = st.connection("coffee_counter", type="sql")
-if 'database' in st.secrets.connections.coffee_counter:
-    if st.secrets.connections.coffee_counter['database'] == 'coffee':
-        pass
-    if st.secrets.connections.coffee_counter['database'] == 'coffee_test':
-        test_data_user()
-        test_data_log()
-elif 'url' in st.secrets.connections.coffee_counter:
-    test_data_user()
-    test_data_log()
+# if 'database' in st.secrets.connections.coffee_counter:
+#     if st.secrets.connections.coffee_counter['database'] == 'coffee':
+#         pass
+#     if st.secrets.connections.coffee_counter['database'] == 'coffee_test':
+#         test_data_user(conn)
+#         test_data_log(conn)
+# elif 'url' in st.secrets.connections.coffee_counter:
+test_data_user(conn)
+test_data_log(conn)
