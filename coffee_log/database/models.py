@@ -54,6 +54,14 @@ class Payment(Base):
     invoice_id: Mapped[Optional[int]] = mapped_column(ForeignKey("invoices.id"))
     invoice: Mapped[Optional["Invoice"]] = relationship(back_populates="payments")
 
+    def save(self, session):
+        try:
+            session.add(self)
+            session.commit()
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern eines Payments: {e}")
+            session.rollback()
+
 
 class User(Base):
     """Mode für einen User"""
@@ -75,21 +83,33 @@ class User(Base):
     payments: Mapped[List[Payment]] = relationship(back_populates="user")
     invoices: Mapped[List["Invoice"]] = relationship(back_populates="user")
 
-    def get_anzahl_monatskaffees(self, datum: datetime, conn) -> int: 
+    def get_anzahl_monatskaffees(self, datum: datetime, conn) -> int:
         if not isinstance(datum, datetime):
             raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
         with conn.session as session:
             coffee_number_stmt = select(func.sum(Log.anzahl)).where(
-            extract("month", Log.ts) == datum.month,
-            extract("year", Log.ts) == datum.year,
-            Log.user_id == self.id,
-        )
+                extract("month", Log.ts) == datum.month,
+                extract("year", Log.ts) == datum.year,
+                Log.user_id == self.id,
+            )
 
-        kaffeemenge = session.scalar(coffee_number_stmt)
-        if kaffeemenge:
-            if kaffeemenge > 0:
-                return kaffeemenge
-        return 0
+            kaffeemenge = session.scalar(coffee_number_stmt)
+            if kaffeemenge:
+                if kaffeemenge > 0:
+                    return kaffeemenge
+            return 0
+
+    def get_payments(self, datum, conn) -> List[Payment]:
+        with conn.session as session:
+            payments = session.scalars(
+                select(Payment).where(
+                    extract("month", Payment.ts) == datum.month,
+                    extract("year", Payment.ts) == datum.year,
+                    Payment.user_id == self.id,
+                )
+            ).all()
+            return payments
+
 
 class Invoice(Base):
     """Model für eine Rechnung"""

@@ -7,9 +7,24 @@ from menu import menu
 def widget_kaffee_anzahl(datum, conn):
     st.metric(
         "getrunkene Tassen Kaffee",
-        st.session_state.user.get_anzahl_monatskaffees(datum, conn),
+        int(st.session_state.user.get_anzahl_monatskaffees(datum, conn),)
     )
 
+def widget_payments(datum, conn):
+    payments = st.session_state.user.get_payments(datum, conn)
+    payment_list = []
+    for payment in payments:
+        payment_list.append(
+            {
+                "Betrag": payment.betrag,
+                "Betreff": payment.betreff,
+                "Typ": payment.typ,
+                "Datum": payment.ts,
+            }
+        )
+    if len(payment_list) == 0:
+        return st.write("Keine Zahlungen in diesem Monat gefunden.")
+    return st.dataframe(payment_list)
 
 st.header("Meine Kaffeeübersicht")
 menu()
@@ -36,4 +51,7 @@ datum = st.selectbox(
 )
 
 if datum:
+    st.subheader("Kaffeeanzahl")
     widget_kaffee_anzahl(datum, conn)
+    st.subheader("Zahlungen")
+    widget_payments(datum, conn)
