@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import select
 
-from menu import menu_with_redirect
+# from menu import menu_with_redirect
 from database.models import User
 
 
@@ -69,7 +69,7 @@ def monatsuebersicht():
 if __name__ == "__main__":
     # Streamlit app layout
     # Initialize the database
-    menu_with_redirect()
+    # menu_with_redirect()
     conn = st.connection("coffee_counter", type="sql")
 
     st.subheader("Monatsübersicht")

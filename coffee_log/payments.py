@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 from database.models import User, Payment
 from sqlalchemy import select
-from menu import menu_with_redirect
+# from menu import menu_with_redirect
 from loguru import logger
 
 
@@ -49,7 +49,7 @@ def sync_data_editor():
 
 
 # Streamlit app layout
-menu_with_redirect()
+# menu_with_redirect()
 # st.write(st.session_state)
 conn = st.connection("coffee_counter", type="sql")
 st.subheader("Zahlung hinzufügen")

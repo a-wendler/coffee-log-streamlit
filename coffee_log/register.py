@@ -8,8 +8,8 @@ import re
 import streamlit as st
 
 from database.models import User
-from menu import menu
-from pages.mail import send_activation_email
+# from menu import menu
+from seiten.mail import send_activation_email
 
 
 def add_user(code, name, vorname, email):
@@ -50,9 +50,9 @@ def is_valid_email(email):
 # Streamlit app layout
 
 # Initialize the database
-if "current_user" not in st.session_state:
-    st.session_state.current_user = {"name": "", "role": None}
-menu()
+# if "current_user" not in st.session_state:
+#     st.session_state.current_user = {"name": "", "role": None}
+# menu()
 conn = st.connection("coffee_counter", type="sql")
 
 st.subheader("Neuen Nutzer für die Kaffeeabrechnung hinzufügen")

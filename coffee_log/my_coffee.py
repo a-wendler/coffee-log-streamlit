@@ -1,7 +1,7 @@
 import streamlit as st
 
-from pages.monatsuebersicht import get_first_days_of_last_six_months
-from menu import menu
+from seiten.monatsuebersicht import get_first_days_of_last_six_months
+
 
 
 def widget_kaffee_anzahl(datum, conn):
@@ -27,7 +27,6 @@ def widget_payments(datum, conn):
     return st.dataframe(payment_list)
 
 st.header("Meine Kaffeeübersicht")
-menu()
 conn = st.connection("coffee_counter", type="sql")
 uebersetzungen = {
     "January": "Januar",

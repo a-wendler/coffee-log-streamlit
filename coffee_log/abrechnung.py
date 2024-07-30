@@ -4,9 +4,9 @@ from decimal import Decimal
 import pandas as pd
 import streamlit as st
 from sqlalchemy import select, extract, func, or_
-from menu import menu_with_redirect
-from pages.monatsuebersicht import get_first_days_of_last_six_months
-from models import Log, User, Payment, Invoice
+# from menu import menu_with_redirect
+from seiten.monatsuebersicht import get_first_days_of_last_six_months
+from database.models import Log, User, Payment, Invoice
 
 
 def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
@@ -328,7 +328,7 @@ def monatsbuchung(datum):
             st.error(e)
             local_session.rollback()
 
-@st.experimental_dialog("Monatsabrechnung erstellen?")
+@st.dialog("Monatsabrechnung erstellen?")
 def confirm_monatsabrechnung():
     st.write("Wollen Sie die Monatsabrechnung wirklich erstellen und die Rechnungen einbuchen?")
     if st.button("Ja"):
@@ -372,7 +372,7 @@ def mark_invoice_paid(id: int):
         st.session_state.invoice_status[id] = "Rechnung als bezahlt markiert"
 
 # Streamlit app layout
-menu_with_redirect()
+# menu_with_redirect()
 if "invoice_status" not in st.session_state:
     st.session_state.invoice_status = {}
 conn = st.connection("coffee_counter", type="sql")

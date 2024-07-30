@@ -6,9 +6,10 @@ import streamlit as st
 from loguru import logger
 
 from database.models import Log, User
-from menu import menu
-from login import check_user
-from pages.mail import send_reset_email
+# from menu import menu
+from login import login
+
+from seiten.mail import send_reset_email
 
 def reset_password(email, conn):
     """Write reset-token to users-table.
@@ -34,6 +35,7 @@ def reset_password(email, conn):
 def log_coffee(conn):
     """Log a coffee entry."""
     if "user" in st.session_state:
+        logger.info(f"User: {st.session_state.user.name}")
         with conn.session as session:
             try:
                 log = Log(
@@ -58,9 +60,9 @@ def log_coffee(conn):
 # st.write(st.session_state)
 conn = st.connection("coffee_counter", type="sql")
 
-st.header("☕ LSB Kaffeeabrechnung")
+# st.header("☕ LSB Kaffeeabrechnung")
 
-menu()
+# menu()
 st.subheader("Kaffee trinken")
 with st.form(key="log_coffee", clear_on_submit=True):
     anzahl = st.select_slider(
@@ -72,10 +74,11 @@ with st.form(key="log_coffee", clear_on_submit=True):
         "Geben Sie Ihr Kennwort ein.", key="code_input", type="password"
     )
     submit = st.form_submit_button(
-        "Kaffee eintragen", type="primary", on_click=check_user, args=(conn,)
+        "Kaffee eintragen", type="primary", on_click=login, args=(conn,)
     )
 
 if submit:
+    logger.info(f"submit ist gedrückt")
     log_coffee(conn)
 
 with st.expander("Kennwort vergessen?"):
@@ -94,13 +97,10 @@ with st.expander("Kennwort vergessen?"):
         else:
             st.error("Fehler beim Zurücksetzen des Passwortes!")
 st.subheader("So funktioniert es:")
-app_path = "https://lsbkaffee.streamlit.app"
-page_file_path = "pages/register.py"
-page = page_file_path.split("/")[1][0:-3]
 
 st.markdown(
     f"""
-    1. <a href="{app_path}/{page}" target="_self">Registrieren</a> Sie sich.
+    1. Registrieren Sie sich links im Menü.
     2. Tragen Sie jeden Kaffee in dieses Tool ein, den Sie trinken.
     3. Erhalten Sie am Monatsende eine Abrechnung und zahlen Sie Ihren Anteil.
     

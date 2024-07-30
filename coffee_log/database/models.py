@@ -10,7 +10,7 @@ from sqlalchemy import Integer, String, ForeignKey, select, extract, func
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from sqlalchemy.types import DECIMAL
-from pages.mail import send_email
+from seiten.mail import send_email
 
 import streamlit as st
 
