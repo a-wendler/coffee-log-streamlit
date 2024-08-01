@@ -1,8 +1,5 @@
 import streamlit as st
-from loguru import logger
 
-from database.models import User
-from login import login
 
 def logout():
     del st.session_state.user
@@ -32,15 +29,15 @@ my_coffee = st.Page("my_coffee.py", title="Meine Kaffeeübersicht", icon=":mater
 payments = st.Page("payments.py", title="Zahlungen", icon=":material/payments:")
 abrechnung = st.Page("abrechnung.py", title="Abrechnung", icon=":material/attach_money:")
 users = st.Page("users.py", title="Nutzer verwalten", icon=":material/people:")
-
+konto = st.Page("account.py", title="Kontostand", icon=":material/account_balance:")
 if "user" in st.session_state:
     standard_pages = [home, register]
 else:
     standard_pages = [home, register, login_page]
-admin_pages = [payments, abrechnung, users]
+admin_pages = [payments, abrechnung, users, konto]
 login_pages = [my_coffee, logout_page, ]
 
-st.write(st.session_state)
+# st.write(st.session_state)
 st.title("☕ LSB Kaffeeabrechnung")
 
 page_dict = {}

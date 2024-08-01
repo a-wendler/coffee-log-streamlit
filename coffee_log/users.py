@@ -61,3 +61,4 @@ def edit_user_data():
 conn = st.connection("coffee_counter", type="sql")
 st.subheader("Nutzer bearbeiten")
 edit_user_data()
+

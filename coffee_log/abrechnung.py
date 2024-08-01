@@ -44,6 +44,11 @@ def gesamt_abrechnung(datum):
         "Gesamtkaffees:",
         get_coffee_number(monat=datum),
     )
+    monatseinnahmen = (get_coffee_number(monat=datum, gruppe="mitglied") * quantize_decimal(st.secrets.KAFFEEPREIS_MITGLIED)) + (get_coffee_number(monat=datum, gruppe="gast") * quantize_decimal(st.secrets.KAFFEEPREIS_GAST))
+    
+    st.write("Einnahmen: € ", monatseinnahmen)
+    st.write("Verbrauchskosten: €", get_payment_sum(datum))
+    st.write("Differenz: € ", monatseinnahmen - get_payment_sum(datum))
 
     with conn.session as local_session:
         payments = local_session.scalars(
@@ -76,7 +81,7 @@ def gesamt_abrechnung(datum):
         payments_df,
         column_config={"Betrag": st.column_config.NumberColumn(format="€ %.2f")},
     )
-    st.write("Verbrauchskosten: €", get_payment_sum(datum))
+
 
 
 class coffee_number_kwargs(TypedDict, total=False):
@@ -138,7 +143,7 @@ def get_coffee_number(**kwargs: coffee_number_kwargs) -> int:
     return 0
 
 
-def get_payment_sum(month: datetime) -> float:
+def get_payment_sum(month: datetime) -> Decimal:
     with conn.session as get_payment_session:
         betrag = (
             get_payment_session.query(func.sum(Payment.betrag))
@@ -258,7 +263,8 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
             kaffee_preis = kaffee_anzahl * quantize_decimal(st.secrets.KAFFEEPREIS_GAST)
 
         gesamtbetrag = quantize_decimal((kaffee_preis - payment_betrag))
-
+    if gesamtbetrag == 0:
+        return None
     return Invoice(
         kaffee_anzahl=kaffee_anzahl,
         kaffee_preis=kaffee_preis,
@@ -293,7 +299,8 @@ def monatsliste(**kwargs: monatsliste_kwargs):
         abrechnungen_list = []
         for user in users:
             rechnung = einzelabrechnung(datum=datum, user_id=user.id)
-            abrechnungen_list.append(rechnung)
+            if rechnung:
+                abrechnungen_list.append(rechnung)
         return abrechnungen_list
 
 
@@ -312,9 +319,9 @@ def monatsbuchung(datum):
                 invoice.payments = payments
                 invoice.monat = datum
                 invoice.ts = datetime.now()
+                if invoice.gesamtbetrag < 0:
+                    invoice.bezahlt = datetime.now()
                 local_session.add(invoice)
-
-            
             local_session.commit()
             st.success("Buchung erfolgreich")
         except Exception as e:
@@ -330,48 +337,20 @@ def confirm_monatsabrechnung():
     )
     if st.button("Ja"):
         monatsbuchung(datum)
+        st.rerun()
     if st.button("Nein"):
         st.rerun()
-
-
-def send_invoice_mail(id: int):
-    mailversand = send_invoice(id)
-
-    if mailversand:
-        st.session_state.invoice_status[id] = mailversand
-    else:
-        st.session_state.invoice_status[id] = "Fehler beim Versand der E-Mail"
-
 
 def send_all_invoices(liste: List[Invoice]):
     for invoice in liste:
         if not invoice.email_versand:
-            mailversand = send_invoice(invoice.id)
+            mailversand = invoice.send_invoice_mail(conn)
             if mailversand:
                 st.session_state.invoice_status[invoice.id] = mailversand
             else:
                 st.session_state.invoice_status[invoice.id] = (
                     "Fehler beim Versand der E-Mail"
                 )
-
-
-def mark_invoice_paid(id: int):
-    with conn.session as session:
-        invoice = session.scalar(select(Invoice).where(Invoice.id == id))
-        invoice.bezahlt = datetime.now()
-        monat = datetime.strptime(invoice.monat, "%Y-%m-%d %H:%M:%S")
-        monat = uebersetzungen[monat.strftime("%B")] + " " + monat.strftime("%Y")
-        payment = Payment(
-            betrag=invoice.gesamtbetrag,
-            betreff=f"Rechnung {monat}",
-            typ="Einzahlung",
-            ts=datetime.now(),
-            user_id=invoice.user_id,
-            invoice_id=invoice.id,
-        )
-        session.add(payment)
-        session.commit()
-        st.session_state.invoice_status[id] = "Rechnung als bezahlt markiert"
 
 
 # Streamlit app layout
@@ -481,16 +460,19 @@ if datum:
                         "Rechnung senden",
                         key=f"invoice_{abrechnung.id}",
                         on_click=abrechnung.send_invoice_mail,
-                        args=(session,),
+                        args=(conn,),
                     )
-                    st.write(st.session_state.invoice_status.get(abrechnung.id, ""))
+                    # st.write(st.session_state.invoice_status.get(abrechnung.id, ""))
 
-                    st.button(
-                        "Rechnung als bezahlt markieren",
-                        key=f"paid_{abrechnung.id}",
-                        on_click=abrechnung.mark_as_paid,
-                        args=(session,),
-                    )
+                    if not abrechnung.bezahlt:
+                        st.button(
+                            "Rechnung als bezahlt markieren",
+                            key=f"paid_{abrechnung.id}",
+                            on_click=abrechnung.mark_as_paid,
+                            args=(session,),
+                        )
+                    if abrechnung.gesamtbetrag < 0:
+                        st.write("Rechnungsbetrag wird als Guthaben in den nächsten Monat übertragen und kann deshalb nicht als bezahlt markiert werden.")
 
             st.button(
                 "Alle Rechnungen senden",

@@ -110,6 +110,36 @@ class User(Base):
             ).all()
             return payments
 
+    def get_saldo(self, conn) -> Decimal:
+        # positive Invoices als SOLL holen
+        # alle payments als HABEN holen
+        with conn.session as session:
+            invoice_sum = session.scalar(
+                select(func.sum(Invoice.gesamtbetrag)).where(
+                    Invoice.gesamtbetrag > 0,
+                    Invoice.user_id == self.id,
+                )
+            )
+            if not invoice_sum:
+                invoice_sum = 0
+
+            payment_sum = session.scalar(
+                select(func.sum(Payment.betrag)).where(
+                    Payment.user_id == self.id,
+                )
+            )
+            if not payment_sum:
+                payment_sum = 0
+        return payment_sum - invoice_sum
+        return 0
+
+    def get_invoices(self, conn) -> List[Invoice]:
+        with conn.session as session:
+            invoices = session.scalars(
+                select(Invoice).where(Invoice.user_id == self.id)
+            ).all()
+            return invoices
+
 
 class Invoice(Base):
     """Model für eine Rechnung"""
@@ -132,6 +162,12 @@ class Invoice(Base):
     payments: Mapped[List[Payment]] = relationship(back_populates="invoice")
 
     def mark_as_paid(self, session):
+        if self.bezahlt:
+            st.error("Die Rechnung wurde bereits bezahlt.")
+            logger.error(
+                f"Rechnung {self.id} wurde bereits bezahlt und wird nicht erneut gebucht."
+            )
+            return
         try:
             # format datum to string of month
             monat = datetime.strptime(self.monat, "%Y-%m-%d %H:%M:%S")
@@ -157,7 +193,7 @@ class Invoice(Base):
             )
             logger.error(f"Rechnung konnte nicht als bezahlt markiert werden: {e}")
 
-    def send_invoice_mail(self, session):
+    def send_invoice_mail(self, conn):
         uebersetzungen = {
             "January": "Januar",
             "February": "Februar",
@@ -180,31 +216,36 @@ Ihre Kaffeeabrechnung für {monat}:
 
 Getrunkene Tassen Kaffee: {self.kaffee_anzahl}
 Preis für Kaffee: {self.kaffee_preis} €"""
-        if self.user.mitglied:
-            text += f"""
-Mietanteil: {self.miete} €"""
         if self.payment_betrag:
             text += f"""         
 Guthaben für Einkäufe etc.: {self.payment_betrag} €
 """
         text += f"""
 =========================================================
-Gesamtbetrag: {self.gesamtbetrag} €
+Gesamtbetrag: {self.gesamtbetrag} €"""
+        if self.gesamtbetrag > 0:
+            text += f"""
 
-Bitte überweisen Sie den Betrag an {st.secrets.BANKVERBINDUNG}.
+{st.secrets.ZAHLUNGSOPTIONEN}
 """
-        try:
-            send_email(self.user.email, text, subject)
-            self.email_versand = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            session.commit()
-            logger.success(f"Rechnung für {monat} an {self.user.email} versandt.")
-            return st.success("Rechnung erfolgreich versandt!")
-        except Exception as e:
-            session.rollback()
-            st.error(
-                "Die Rechnung konnte nicht per Email versandt werden. Es ist ein Fehler aufgetreten."
-            )
-            logger.error(
-                f"Rechnung für {monat} an {self.user.email} konnte nicht per Email versandt werden: {e}"
-            )
-            return e
+        if self.gesamtbetrag < 0:
+            text += """
+            Der Betrag wird Ihnen als Guthaben auf Ihr "Kaffee-Konto" gutgeschrieben. Sie brauchen nicht zu überweisen. Ihr Guthaben wird automatisch mit zukünftigen Rechnungen verrechnet.
+            """
+        with conn.session as session:
+            try:
+                # send_email(self.user.email, text, subject)
+                send_email("andre.wendler@gmail.com", text, subject)
+                self.email_versand = datetime.now()
+                session.commit()
+                logger.success(f"Rechnung für {monat} an {self.user.email} versandt.")
+                return st.success("Rechnung erfolgreich versandt!")
+            except Exception as e:
+                session.rollback()
+                st.error(
+                    "Die Rechnung konnte nicht per Email versandt werden. Es ist ein Fehler aufgetreten."
+                )
+                logger.error(
+                    f"Rechnung für {monat} an {self.user.email} konnte nicht per Email versandt werden: {e}"
+                )
+                return e

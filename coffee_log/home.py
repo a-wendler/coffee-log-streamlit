@@ -6,7 +6,6 @@ import streamlit as st
 from loguru import logger
 
 from database.models import Log, User
-# from menu import menu
 from login import login
 
 from seiten.mail import send_reset_email
@@ -62,7 +61,7 @@ conn = st.connection("coffee_counter", type="sql")
 
 # st.header("☕ LSB Kaffeeabrechnung")
 
-# menu()
+# st.write(f"Datenbank: {st.secrets.connections.coffee_counter.database}")
 st.subheader("Kaffee trinken")
 with st.form(key="log_coffee", clear_on_submit=True):
     anzahl = st.select_slider(
