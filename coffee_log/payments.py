@@ -2,28 +2,31 @@
 Module for editing payment data.
 """
 
-from datetime import datetime
 import streamlit as st
 import pandas as pd
-from models import User, Payment
 from sqlalchemy import select
-from menu import menu_with_redirect
+from loguru import logger
 
+from database.models import User, Payment
 
 def new_payment():
     """Add new payment."""
     with conn.session as session:
-        session.add(
-            Payment(
-                user_id=st.session_state.user,
+        try:
+            payment = Payment(
+                user_id=st.session_state.user_selection,
                 betreff=st.session_state.betreff,
                 typ=st.session_state.typ,
                 betrag=st.session_state.betrag,
                 ts=st.session_state.ts,
             )
-        )
-        session.commit()
-        st.success("Zahlung wurde hinzugefügt!")
+            payment.save(session)
+            st.success("Zahlung wurde hinzugefügt!")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Beim Hinzufügen der Zahlung ist ein Fehler aufgetreten: {e}")
+            st.error(f"Beim Hinzufügen der Zahlung ist ein Fehler aufgetreten: {e}")
+        
 
 
 def edit_payment_data():
@@ -44,7 +47,7 @@ def sync_data_editor():
 
 
 # Streamlit app layout
-menu_with_redirect()
+# menu_with_redirect()
 # st.write(st.session_state)
 conn = st.connection("coffee_counter", type="sql")
 st.subheader("Zahlung hinzufügen")
@@ -61,12 +64,12 @@ with st.form(key="payment_form", clear_on_submit=True):
             format_func=lambda x: session.execute(select(User).filter(User.id == x))
             .first()[0]
             .name,
-            key="user",
+            key="user_selection",
         )
     betreff = st.text_input("Betreff", key="betreff")
     typ = st.selectbox(
         "Typ",
-        ["Einkauf", "Rücklage", "Korrektur", "Auszahlung", "Einzahlung", "Miete"],
+        ["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"],
         key="typ",
     )
     betrag = st.number_input("Betrag", key="betrag")

@@ -4,3 +4,6 @@
 __pycache__/
 venv/
 secrets.toml
+secrets_old.toml
+secrets_live.toml
+secrets_test.toml

@@ -1,50 +1,99 @@
-import os
-from datetime import datetime
 from hashlib import sha256
 
 import streamlit as st
+from sqlalchemy import select
+from loguru import logger
 
-from models import Log, User
-from menu import menu
-from pages.mail import send_reset_email
-
-from login import check_user
+from database.models import User
 
 
-def reset_password(email):
-    """Write reset_key to users-table.
-    returns: reset_key to reset the password"""
-    token = "reset_" + sha256(os.urandom(60)).hexdigest()
-    try:
-        with conn.session as session:
-            user = (
-                session.query(User)
-                .filter(User.email == email, User.status == "active")
-                .first()
+def logout():
+    del st.session_state.user
+    st.rerun()
+
+
+def clear_params():
+    st.query_params.clear()
+
+
+def tokens():
+    if "token" in st.query_params:
+        if st.query_params.token.startswith("reset_"):
+            set_new_password()
+        elif st.query_params.token.startswith("activate_"):
+            activate()
+        else:
+            st.error("Ungültiger Link!")
+            back = st.button("Zurück zur Startseite", on_click=clear_params)
+            if back:
+                st.query_params.clear()
+
+
+def activate():
+    """Check if token is valid and activate user."""
+    with conn.session as session:
+        try:
+            user = session.scalar(
+                select(User).where(User.token == st.query_params.token)
             )
-            user.token = token
-            session.commit()
-    except:
-        return None
-    return token
-
-
-# Function to log a coffee
-def log_coffee():
-    """Log a coffee entry."""
-    if "user" in st.session_state:
-        with conn.session as session:
-            log = Log(
-                user=st.session_state.user,
-                ts=datetime.now().isoformat(),
-                anzahl=st.session_state.anzahl_slider,
+            if user:
+                user.status = "active"
+                user.token = None
+                session.commit()
+                st.success("Ihr Konto wurde aktiviert!")
+            else:
+                st.error("Ungültiger Link!")
+                back = st.button("Zurück zur Startseite", on_click=clear_params)
+                if back:
+                    st.query_params.clear()
+        except Exception as e:
+            session.rollback()
+            st.error(
+                "Fehler beim Aktivieren des Accounts. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
             )
-            session.add(log)
-            session.commit()
-            st.success("Ihr Kaffee wurde eingetragen!")
-            del st.session_state.user
-    else:
-        st.error("Ungültiges Kennwort oder Nutzerkonto nicht aktiviert!")
+            logger.error(f"Fehler beim Aktivieren des Accounts: {e}")
+            back = st.button("Zurück zur Startseite", on_click=clear_params)
+            if back:
+                st.query_params.clear()
+
+
+def set_new_password():
+    """Check if reset_key is valid and ask user for new password."""
+    with conn.session as session:
+        try:
+            user = session.scalar(
+                select(User).where(
+                    User.token == st.query_params.token, User.status == "active"
+                )
+            )
+            # st.write(user)
+            if user:
+                new_password = st.text_input("Neues Kennwort", type="password")
+                if st.button("Neues Kennwort speichern"):
+                    user.code = sha256(new_password.encode("utf-8")).hexdigest()
+                    user.token = None
+                    session.commit()
+
+                    st.write("Kennwort wurde geändert!")
+                    logger.success(f"Passwort für User {user.id} erfolgreich geändert.")
+                    back = st.button("Zurück zur Startseite", on_click=clear_params)
+                    if back:
+                        st.query_params.clear()
+
+            else:
+                st.error("Ungültiger Link!")
+                back = st.button("Zurück zur Startseite", on_click=clear_params)
+                if back:
+                    st.query_params.clear()
+        except Exception as e:
+            session.rollback()
+            st.error(
+                "Fehler beim Zurücksetzen des Passworts. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
+            )
+            logger.error(f"Fehler beim Zurücksetzen des Passworts: {e}")
+            back = st.button("Zurück zur Startseite", on_click=clear_params)
+            if back:
+                st.query_params.clear()
 
 
 # Streamlit app layout
@@ -52,63 +101,60 @@ def log_coffee():
 # Initialize the database
 conn = st.connection("coffee_counter", type="sql")
 
-if "current_user" not in st.session_state:
-    st.session_state.current_user = {"name": "", "role": None}
-# st.write(st.session_state)
+# add logfile to logger
+# logger.add("logs.log")
 
 
-menu()
-st.header("☕ LSB Kaffeeabrechnung")
-st.subheader("Kaffee trinken")
-with st.form(key="log_coffee", clear_on_submit=True):
-    anzahl = st.select_slider(
-        "Wieviele Tassen Kaffee wollen Sie eintragen?",
-        options=list(range(1, 6)),
-        key="anzahl_slider",
-    )
-    code = st.text_input(
-        "Geben Sie Ihr Kennwort ein.", key="code_input", type="password"
-    )
-    submit = st.form_submit_button(
-        "Kaffee eintragen", type="primary", on_click=check_user
-    )
-
-if submit:
-    log_coffee()
-
-with st.expander("Kennwort vergessen?"):
-    st.subheader("Kennwort zurücksetzen")
-    email = st.text_input("Geben Sie Ihre E-Mail-Adresse ein:")
-    if st.button("Kennwort zurücksetzen"):
-        reset_key = reset_password(email)
-        if reset_key:
-            try:
-                send_reset_email(email, reset_key)
-                st.success(
-                    f"Ein Link zum Zurücksetzen Ihres Kennworts wurde an {email} gesendet."
-                )
-            except Exception as e:
-                st.error(f"Beim Senden der E-Mail ist ein Fehler aufgetreten: {e}")
-        else:
-            st.error("Fehler beim Zurücksetzen des Passwortes!")
-st.subheader("So funktioniert es:")
-app_path = "https://lsbkaffee.streamlit.app"
-page_file_path = "pages/register.py"
-page = page_file_path.split("/")[1][0:-3]
-
-st.markdown(
-    f"""
-    1. <a href="{app_path}/{page}" target="_self">Registrieren</a> Sie sich.
-    2. Tragen Sie jeden Kaffee in dieses Tool ein, den Sie trinken.
-    3. Erhalten Sie am Monatsende eine Abrechnung und zahlen Sie Ihren Anteil.
-    
-    __Warum digital?__ Die Abrechnung macht keinen Aufwand und Sie haben jederzeit einen Überblick über Ihre Kaffeeausgaben.
-
-    Ein Kaffee kostet € 1,– für Gäste und € 0,25 für Mitglieder, die sich an der Monatsmiete beteiligen. Wenn Sie Mitglied werden wollen, registrieren Sie sich hier und wenden Sie sich an {st.secrets.admins['rechnung']}.
-""",
-    unsafe_allow_html=True,
+# Seiten ohne Login
+home = st.Page("home.py", title="Start", icon=":material/home:", default=True)
+register = st.Page(
+    "register.py", title="Registrieren", icon=":material/assignment_ind:"
 )
-st.expander("Datenschutz").markdown(
-    f"Diese App speichert nur die Daten, die Sie eingeben. Die Daten werden ausschließlich zum Aufteilen der Unkosten für die Kaffeemaschine im 3. OG verwendet. Die Daten sind auf einem Server beim deutschen Anbieter Hetzner in Nürnberg gespeichert. Der Zugriff auf die Daten ist nur für die Administratoren der Kaffeekasse möglich. Sie können jederzeit einen vollständigen Einblick in Ihre Daten erhalten und die Löschung Ihrer Daten verlangen. Bitte wenden Sie sich dazu an {st.secrets.admins['technik']}."
+login_page = st.Page("login_page.py", title="Anmelden", icon=":material/login:")
+
+# Seiten mit Login
+logout_page = st.Page(logout, title="Abmelden", icon=":material/logout:")
+my_coffee = st.Page(
+    "my_coffee.py", title="Meine Kaffeeübersicht", icon=":material/local_cafe:"
 )
+
+# Seiten als Admin
+payments = st.Page("payments.py", title="Zahlungen", icon=":material/payments:")
+abrechnung = st.Page(
+    "abrechnung.py", title="Abrechnung", icon=":material/attach_money:"
+)
+users = st.Page("users.py", title="Nutzer verwalten", icon=":material/people:")
+konto = st.Page("account.py", title="Kontostand", icon=":material/account_balance:")
+if "user" in st.session_state:
+    standard_pages = [home, register]
+else:
+    standard_pages = [home, register, login_page]
+admin_pages = [payments, abrechnung, users, konto]
+login_pages = [
+    my_coffee,
+    logout_page,
+]
+passwort_reset_page = st.Page(set_new_password, title="Passwort zurücksetzen")
+
 # st.write(st.session_state)
+st.title("☕ LSB Kaffeeabrechnung")
+
+page_dict = {}
+
+if "token" in st.query_params:
+    pg = st.navigation([st.Page(tokens)])
+
+else:
+    if "user" not in st.session_state:
+        page_dict["Menü"] = standard_pages
+
+    if "user" in st.session_state:
+        page_dict["Menü"] = standard_pages
+        if "user" in st.session_state and st.session_state.user.admin == 1:
+            page_dict["Admin"] = admin_pages
+        page_dict["Persönlicher Bereich"] = login_pages
+
+if len(page_dict) > 0:
+    pg = st.navigation(page_dict)
+
+pg.run()
