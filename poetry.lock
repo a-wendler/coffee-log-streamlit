@@ -915,6 +915,17 @@ files = [
 ]
 
 [[package]]
+name = "pycparser"
+version = "2.22"
+description = "C parser in Python"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pycparser-2.22-py3-none-any.whl", hash = "sha256:c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc"},
+    {file = "pycparser-2.22.tar.gz", hash = "sha256:491c8be9c040f5390f5bf44a5b07752bd07f56edf992381b05c701439eec10f6"},
+]
+
+[[package]]
 name = "pydeck"
 version = "0.9.1"
 description = "Widget for deck.gl maps"
@@ -1455,3 +1466,4 @@ dev = ["black (>=19.3b0)", "pytest (>=4.6.2)"]
 lock-version = "2.0"
 python-versions = "^3.12"
 content-hash = "efff0b15daa0869b3747b5e2ef91fd639061522cc10fe1eabe3bef764978588a"
+
