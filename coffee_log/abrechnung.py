@@ -7,7 +7,7 @@ from sqlalchemy import select, extract, func, or_
 from loguru import logger
 
 # from menu import menu_with_redirect
-from seiten.monatsuebersicht import get_first_days_of_last_six_months
+from helper import get_first_days_of_last_six_months
 from database.models import Log, User, Payment, Invoice
 
 

@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 from database.models import User
 from sqlalchemy import select
-# from menu import menu_with_redirect
 
 
 def edit_user_data():

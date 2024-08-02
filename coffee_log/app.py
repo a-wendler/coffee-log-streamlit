@@ -1,5 +1,4 @@
 from hashlib import sha256
-import time
 
 import streamlit as st
 from sqlalchemy import select
@@ -12,8 +11,10 @@ def logout():
     del st.session_state.user
     st.rerun()
 
+
 def clear_params():
     st.query_params.clear()
+
 
 def tokens():
     if "token" in st.query_params:
@@ -26,20 +27,20 @@ def tokens():
             back = st.button("Zurück zur Startseite", on_click=clear_params)
             if back:
                 st.query_params.clear()
-                
+
 
 def activate():
     """Check if token is valid and activate user."""
     with conn.session as session:
         try:
-            user = session.scalar(select(User).where(User.token == st.query_params.token))
+            user = session.scalar(
+                select(User).where(User.token == st.query_params.token)
+            )
             if user:
                 user.status = "active"
                 user.token = None
                 session.commit()
-                st.success(
-                    "Ihr Konto wurde aktiviert!"
-                )
+                st.success("Ihr Konto wurde aktiviert!")
             else:
                 st.error("Ungültiger Link!")
                 back = st.button("Zurück zur Startseite", on_click=clear_params)
@@ -54,6 +55,7 @@ def activate():
             back = st.button("Zurück zur Startseite", on_click=clear_params)
             if back:
                 st.query_params.clear()
+
 
 def set_new_password():
     """Check if reset_key is valid and ask user for new password."""
@@ -77,7 +79,7 @@ def set_new_password():
                     back = st.button("Zurück zur Startseite", on_click=clear_params)
                     if back:
                         st.query_params.clear()
-                    
+
             else:
                 st.error("Ungültiger Link!")
                 back = st.button("Zurück zur Startseite", on_click=clear_params)
@@ -154,5 +156,5 @@ else:
 
 if len(page_dict) > 0:
     pg = st.navigation(page_dict)
-    
+
 pg.run()
