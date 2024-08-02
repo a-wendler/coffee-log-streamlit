@@ -161,37 +161,38 @@ class Invoice(Base):
     user: Mapped["User"] = relationship(back_populates="invoices")
     payments: Mapped[List[Payment]] = relationship(back_populates="invoice")
 
-    def mark_as_paid(self, session):
+    def mark_as_paid(self, conn):
         if self.bezahlt:
             st.error("Die Rechnung wurde bereits bezahlt.")
             logger.error(
                 f"Rechnung {self.id} wurde bereits bezahlt und wird nicht erneut gebucht."
             )
             return
-        try:
-            # format datum to string of month
-            monat = datetime.strptime(self.monat, "%Y-%m-%d %H:%M:%S")
-            monat = monat.strftime("%m-%Y")
+        with conn.session as session:
+            try:
+                # format datum to string of month
+                monat = datetime.strptime(self.monat, "%Y-%m-%d %H:%M:%S")
+                monat = monat.strftime("%m-%Y")
 
-            self.bezahlt = datetime.now()
-            self.payments.append(
-                Payment(
-                    betrag=self.gesamtbetrag,
-                    betreff=f"Rechnung {monat} bezahlt",
-                    typ="Einzahlung",
-                    ts=datetime.now(),
-                    user_id=self.user_id,
-                    invoice_id=self.id,
+                self.bezahlt = datetime.now()
+                self.payments.append(
+                    Payment(
+                        betrag=self.gesamtbetrag,
+                        betreff=f"Rechnung {monat} bezahlt",
+                        typ="Einzahlung",
+                        ts=datetime.now(),
+                        user_id=self.user_id,
+                        invoice_id=self.id,
+                    )
                 )
-            )
-            session.add(self)
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            st.error(
-                "Die Rechnung konnte nicht als bezahlt markiert werden. Es ist ein Fehler aufgetreten."
-            )
-            logger.error(f"Rechnung konnte nicht als bezahlt markiert werden: {e}")
+                session.add(self)
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                st.error(
+                    "Die Rechnung konnte nicht als bezahlt markiert werden. Es ist ein Fehler aufgetreten."
+                )
+                logger.error(f"Rechnung konnte nicht als bezahlt markiert werden: {e}")
 
     def send_invoice_mail(self, conn):
         uebersetzungen = {
@@ -212,6 +213,7 @@ class Invoice(Base):
         monat = uebersetzungen[monat.strftime("%B")] + " " + monat.strftime("%Y")
         subject = f"LSB Kaffeeabrechnung {monat}"
         text = f"""
+        Guten Tag {self.user.vorname} {self.user.name},
 Ihre Kaffeeabrechnung für {monat}:
 
 Getrunkene Tassen Kaffee: {self.kaffee_anzahl}
@@ -237,6 +239,7 @@ Gesamtbetrag: {self.gesamtbetrag} €"""
                 # send_email(self.user.email, text, subject)
                 send_email("andre.wendler@gmail.com", text, subject)
                 self.email_versand = datetime.now()
+                session.add(self)
                 session.commit()
                 logger.success(f"Rechnung für {monat} an {self.user.email} versandt.")
                 return st.success("Rechnung erfolgreich versandt!")

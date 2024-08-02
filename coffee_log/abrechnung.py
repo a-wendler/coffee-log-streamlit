@@ -79,7 +79,7 @@ def gesamt_abrechnung(datum):
     st.subheader("Zahlungen")
     st.dataframe(
         payments_df,
-        column_config={"Betrag": st.column_config.NumberColumn(format="€ %.2f")},
+        column_config={"Betrag": st.column_config.NumberColumn(format="€ %.2f"), "Datum": st.column_config.DatetimeColumn(format="DD.MM.YYYY")},
     )
 
 
@@ -469,7 +469,7 @@ if datum:
                             "Rechnung als bezahlt markieren",
                             key=f"paid_{abrechnung.id}",
                             on_click=abrechnung.mark_as_paid,
-                            args=(session,),
+                            args=(conn,),
                         )
                     if abrechnung.gesamtbetrag < 0:
                         st.write("Rechnungsbetrag wird als Guthaben in den nächsten Monat übertragen und kann deshalb nicht als bezahlt markiert werden.")

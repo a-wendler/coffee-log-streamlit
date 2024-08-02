@@ -118,9 +118,9 @@ if datum:
             "Rechnungsmonat": st.column_config.DatetimeColumn(
                 "Rechnungsmonat", format="MMM YYYY"
             ),
-            "bezahlt": st.column_config.DatetimeColumn("bezahlt am", format="DD.MM.YY"),
-            "email_versand": st.column_config.DatetimeColumn(
-                "E-Mail verschickt am", format="DD.MM.YY"
+            "bezahlt": st.column_config.DatetimeColumn("bezahlt am", format="DD.MM.YYYY"),
+            "E-Mail-Versand am": st.column_config.DatetimeColumn(
+                "E-Mail verschickt am", format="DD.MM.YYYY"
             ),
         },
     )
