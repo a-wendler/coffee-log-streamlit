@@ -236,8 +236,7 @@ Gesamtbetrag: {self.gesamtbetrag} €"""
             """
         with conn.session as session:
             try:
-                # send_email(self.user.email, text, subject)
-                send_email("andre.wendler@gmail.com", text, subject)
+                send_email(self.user.email, text, subject)
                 self.email_versand = datetime.now()
                 session.add(self)
                 session.commit()

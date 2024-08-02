@@ -61,7 +61,7 @@ conn = st.connection("coffee_counter", type="sql")
 
 # st.header("☕ LSB Kaffeeabrechnung")
 
-st.write(f"Datenbank: {st.secrets.connections.coffee_counter.database}")
+# st.write(f"Datenbank: {st.secrets.connections.coffee_counter.database}")
 st.subheader("Kaffee trinken")
 with st.form(key="log_coffee", clear_on_submit=True):
     anzahl = st.select_slider(
