@@ -8,7 +8,6 @@ import re
 import streamlit as st
 
 from database.models import User
-# from menu import menu
 from seiten.mail import send_activation_email
 
 

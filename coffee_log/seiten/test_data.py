@@ -84,12 +84,12 @@ def test_data_log(conn):
 st.write("hello")
 
 conn = st.connection("coffee_counter", type="sql")
-# if 'database' in st.secrets.connections.coffee_counter:
-#     if st.secrets.connections.coffee_counter['database'] == 'coffee':
-#         pass
-#     if st.secrets.connections.coffee_counter['database'] == 'coffee_test':
-#         test_data_user(conn)
-#         test_data_log(conn)
-# elif 'url' in st.secrets.connections.coffee_counter:
-test_data_user(conn)
-test_data_log(conn)
+if 'database' in st.secrets.connections.coffee_counter:
+    if st.secrets.connections.coffee_counter['database'] == 'coffee':
+        pass
+    if st.secrets.connections.coffee_counter['database'] == 'coffee_test':
+        test_data_user(conn)
+        test_data_log(conn)
+elif 'url' in st.secrets.connections.coffee_counter:
+    test_data_user(conn)
+    test_data_log(conn)
