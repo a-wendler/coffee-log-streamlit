@@ -1,6 +1,6 @@
 import streamlit as st
 
-from helper import get_first_days_of_last_six_months
+from helpers import get_first_days_of_last_six_months
 
 
 def widget_kaffee_anzahl(datum, conn):

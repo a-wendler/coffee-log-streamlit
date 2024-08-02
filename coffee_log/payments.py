@@ -4,10 +4,10 @@ Module for editing payment data.
 
 import streamlit as st
 import pandas as pd
-from database.models import User, Payment
 from sqlalchemy import select
 from loguru import logger
 
+from database.models import User, Payment
 
 def new_payment():
     """Add new payment."""
