@@ -10,6 +10,18 @@ def widget_kaffee_anzahl(datum, conn):
             st.session_state.user.get_anzahl_monatskaffees(datum, conn),
         ),
     )
+    st.dataframe(
+        [
+            {
+                "Datum": log.ts,
+                "Anzahl": log.anzahl,
+            }
+            for log in st.session_state.user.kaffee_liste(conn, datum=datum)
+        ],
+        column_config={
+            "Datum": st.column_config.DatetimeColumn("Datum", format="DD.MM.YY")
+        },
+    )
 
 
 def widget_payments(datum, conn):
@@ -25,7 +37,9 @@ def widget_payments(datum, conn):
             }
         )
     if len(payment_list) == 0:
-        return st.write("Sie haben in diesem Monat keine Einkäufe oder Auszahlungen abgerechnet.")
+        return st.write(
+            "Sie haben in diesem Monat keine Einkäufe oder Auszahlungen abgerechnet."
+        )
     return payment_list
 
 
@@ -38,9 +52,9 @@ def widget_saldo():
         )
     if saldo > 0:
         st.metric(
-        "Ihr Guthaben",
-        "€ " + str(st.session_state.user.get_saldo(conn)),
-    )
+            "Ihr Guthaben",
+            "€ " + str(st.session_state.user.get_saldo(conn)),
+        )
 
     if saldo == 0:
         st.metric(
@@ -51,18 +65,29 @@ def widget_saldo():
 
 def widget_invoices(conn):
     invoices = st.session_state.user.get_invoices(conn)
-    invoice_list = []
-    for invoice in invoices:
-        invoice_list.append(
-            {
-                "Rechnungsmonat": invoice.monat,
-                "Betrag": invoice.gesamtbetrag,
-                "Kaffeeanzahl": invoice.kaffee_anzahl,
-                "bezahlt": invoice.bezahlt,
-                "E-Mail-Versand am": invoice.email_versand,
-                
-            }
-        )
+    invoice_list = [
+        {
+            "Rechnungsmonat": invoice.monat,
+            "Zahlbetrag": invoice.gesamtbetrag,
+            "Kaffeekosten": invoice.kaffee_preis,
+            "Kaffeeanzahl": invoice.kaffee_anzahl,
+            "bezahlt": invoice.bezahlt,
+            "E-Mail-Versand am": invoice.email_versand,
+        }
+        for invoice in invoices
+    ]
+    # invoice_list = []
+    # for invoice in invoices:
+    #     invoice_list.append(
+    #         {
+    #             "Rechnungsmonat": invoice.monat,
+    #             "Zahlbetrag": invoice.gesamtbetrag,
+    #             "Kaffeekosten": invoice.kaffee_preis,
+    #             "Kaffeeanzahl": invoice.kaffee_anzahl,
+    #             "bezahlt": invoice.bezahlt,
+    #             "E-Mail-Versand am": invoice.email_versand,
+    #         }
+    #     )
     if len(invoice_list) == 0:
         return st.write("Keine Rechnungen gefunden.")
     return invoice_list
@@ -100,7 +125,12 @@ if datum:
         if zahlungen:
             st.dataframe(
                 zahlungen,
-                column_config={"Betrag": st.column_config.NumberColumn(format="€ %g"), "Datum": st.column_config.DatetimeColumn("Datum", format="DD.MM.YY")},
+                column_config={
+                    "Betrag": st.column_config.NumberColumn(format="€ %g"),
+                    "Datum": st.column_config.DatetimeColumn(
+                        "Datum", format="DD.MM.YY"
+                    ),
+                },
             )
     st.subheader("Saldo insgesamt")
     widget_saldo()
@@ -118,7 +148,9 @@ if datum:
             "Rechnungsmonat": st.column_config.DatetimeColumn(
                 "Rechnungsmonat", format="MMM YYYY"
             ),
-            "bezahlt": st.column_config.DatetimeColumn("bezahlt am", format="DD.MM.YYYY"),
+            "bezahlt": st.column_config.DatetimeColumn(
+                "bezahlt am", format="DD.MM.YYYY"
+            ),
             "E-Mail-Versand am": st.column_config.DatetimeColumn(
                 "E-Mail verschickt am", format="DD.MM.YYYY"
             ),

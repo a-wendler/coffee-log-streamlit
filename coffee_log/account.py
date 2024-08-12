@@ -71,5 +71,5 @@ with conn.session as session:
         column_config={"Saldo": st.column_config.NumberColumn(format="€ %g")},
     )
     st.write(
-        "Ein positiver Saldo bedeutet, dass die Person Guthaben hat. Negativer Saldo bedeutet, dass Rechnungen offen sind."
+        "Ein positiver Saldo bedeutet, dass die Person Guthaben hat. Negativer Saldo bedeutet, dass Rechnungen offen sind. Kaffees des laufenden Monats für den noch keine Abrechnung gemacht wurde sind im individuellen Saldo nicht enthalten."
     )

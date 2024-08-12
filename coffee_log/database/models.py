@@ -115,8 +115,11 @@ class User(Base):
         # alle payments als HABEN holen
         with conn.session as session:
             invoice_sum = session.scalar(
-                select(func.sum(Invoice.gesamtbetrag)).where(
-                    Invoice.gesamtbetrag > 0,
+                # select(func.sum(Invoice.gesamtbetrag)).where(
+                #     Invoice.gesamtbetrag > 0,
+                #     Invoice.user_id == self.id,
+                # )
+                select(func.sum(Invoice.kaffee_preis)).where(
                     Invoice.user_id == self.id,
                 )
             )
@@ -139,6 +142,25 @@ class User(Base):
                 select(Invoice).where(Invoice.user_id == self.id)
             ).all()
             return invoices
+        
+    def kaffee_liste(self, conn, **kwargs):
+        datum = kwargs.get("datum", None)
+        if not isinstance(datum, datetime):
+            raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
+        with conn.session as session:
+            coffee_stmt = (
+                select(Log)
+                .where(
+                    Log.user_id == self.id,
+                    extract("month", Log.ts) == datum.month,
+                    extract("year", Log.ts) == datum.year,
+                )
+                .order_by(Log.ts.desc())
+            )
+            coffee_list = session.scalars(coffee_stmt).all()
+            if not coffee_list:
+                return None
+            return coffee_list
 
 
 class Invoice(Base):
@@ -220,21 +242,33 @@ Getrunkene Tassen Kaffee: {self.kaffee_anzahl}
 Preis für Kaffee: {self.kaffee_preis} €"""
         if self.payment_betrag:
             text += f"""         
-Guthaben für Einkäufe etc.: {self.payment_betrag} €
+Einkäufe diesen Monat: {self.payment_betrag} €
 """
-        text += f"""
-=========================================================
-Gesamtbetrag: {self.gesamtbetrag} €"""
-        if self.gesamtbetrag > 0:
-            text += f"""
+        with conn.session as session:
+            if self.gesamtbetrag < self.kaffee_preis:
+                if self.gesamtbetrag == 0:
+                    text += f"""
+Ihr bestehendes Guthaben wurde mit den Kosten für diesen Monat verrechnet.
+
+Sie müssen nichts überweisen.
+
+Ihr aktuelles Guthaben beträgt: {self.user.get_saldo(conn)} €
+"""
+                if self.gesamtbetrag > 0:
+                    text += f"""
+Ihr bestehendes Guthaben wurde mit den Kosten für diesen Monat verrechnet.
+
+Sie müssen nur den Restbetrag von {self.gesamtbetrag} € überweisen.
 
 {st.secrets.ZAHLUNGSOPTIONEN}
 """
-        if self.gesamtbetrag < 0:
-            text += """
-            Der Betrag wird Ihnen als Guthaben auf Ihr "Kaffee-Konto" gutgeschrieben. Sie brauchen nicht zu überweisen. Ihr Guthaben wird automatisch mit zukünftigen Rechnungen verrechnet.
-            """
-        with conn.session as session:
+            if self.gesamtbetrag == self.kaffee_preis:
+                text += f"""
+=========================================================
+Gesamtbetrag: {self.gesamtbetrag} €
+
+{st.secrets.ZAHLUNGSOPTIONEN}
+"""
             try:
                 send_email(self.user.email, text, subject)
                 self.email_versand = datetime.now()
