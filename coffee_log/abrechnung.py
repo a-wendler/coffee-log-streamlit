@@ -235,11 +235,13 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
             kaffee_preis = kaffee_anzahl * quantize_decimal(st.secrets.KAFFEEPREIS_GAST)
 
         saldo = user.get_saldo(conn)
+        bezahlt = None
         if saldo > 0:  # Nutzer hat noch Guthaben
             if saldo - kaffee_preis < 0:  # Nutzer hat nicht genug Guthaben
                 gesamtbetrag = kaffee_preis - saldo # Guthaben wird verrechnet und Restbetrag ist fällig
             if saldo - kaffee_preis >= 0:  # Nutzer hat genug Guthaben
                 gesamtbetrag = quantize_decimal("0") # es ist keine Zahlung fällig
+                bezahlt = datetime.now()
         if saldo <= 0: # Nutzer hat kein Guthaben
             gesamtbetrag = quantize_decimal(kaffee_preis)
     
@@ -253,6 +255,7 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
         user_id=user_id,
         user=user,
         ts=datetime.now(),
+        bezahlt=bezahlt,
     )
 
 
@@ -384,6 +387,7 @@ if datum:
                         "Kaffeeanzahl": abrechnung.kaffee_anzahl,
                         "Kaffeekosten": abrechnung.kaffee_preis,
                         "Einkäufe": abrechnung.payment_betrag,
+                        "Guthaben alt": abrechnung.user.get_saldo(conn),
                     }
                 )
 
@@ -443,7 +447,6 @@ if datum:
                         on_click=abrechnung.send_invoice_mail,
                         args=(conn,),
                     )
-                    # st.write(st.session_state.invoice_status.get(abrechnung.id, ""))
 
                     if not abrechnung.bezahlt:
                         st.button(
@@ -453,7 +456,7 @@ if datum:
                             args=(conn,),
                         )
                     if abrechnung.gesamtbetrag <= 0:
-                        st.write("Rechnungsbetrag wird als Guthaben in den nächsten Monat übertragen und kann deshalb nicht als bezahlt markiert werden.")
+                        st.write("Keine Zahlung fällig. Kaffeekosten wurden mit Guthaben verrechnet.")
 
             st.button(
                 "Alle Rechnungen senden",
