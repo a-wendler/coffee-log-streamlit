@@ -1,4 +1,6 @@
 import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
 
 from helpers import get_first_days_of_last_six_months
 
@@ -10,14 +12,16 @@ def widget_kaffee_anzahl(datum, conn):
             st.session_state.user.get_anzahl_monatskaffees(datum, conn),
         ),
     )
-    st.dataframe(
-        [
+    df = pd.DataFrame([
             {
-                "Datum": log.ts,
+                "Datum": log.ts[:10],
                 "Anzahl": log.anzahl,
             }
             for log in st.session_state.user.kaffee_liste(conn, datum=datum)
-        ],
+        ])
+    
+    st.dataframe(df.groupby("Datum")["Anzahl"].sum().reset_index()
+        ,
         column_config={
             "Datum": st.column_config.DatetimeColumn("Datum", format="DD.MM.YY")
         },

@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import select
 
-from database.models import User, Payment
+from database.models import User, Payment, Invoice
 
 
 def zahlungsliste(conn):
@@ -34,6 +34,11 @@ def zahlungsliste(conn):
                 )
         return zahlungsliste
 
+def offene_rechnungen(conn):
+    with conn.session as session:
+        rechnungen = session.scalars(select(Invoice).where(Invoice.bezahlt == None)).all()
+    return [rechnung.id for rechnung in rechnungen]
+
 
 # Streamlit app layout
 conn = st.connection("coffee_counter", type="sql")
@@ -51,6 +56,9 @@ st.dataframe(
 
 saldo = "€ " + str(df_zahlungen["Betrag"].sum()).replace(".", ",")
 st.metric("Kontostand", saldo)
+
+st.write("offene Rechnungen")
+
 
 st.subheader("Saldi der Nutzenden")
 with conn.session as session:

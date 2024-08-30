@@ -130,7 +130,7 @@ if "user" in st.session_state:
     standard_pages = [home, register]
 else:
     standard_pages = [home, register, login_page]
-admin_pages = [payments, abrechnung, users, konto, guthaben_test]
+admin_pages = [payments, abrechnung, users, konto]
 login_pages = [
     my_coffee,
     logout_page,
