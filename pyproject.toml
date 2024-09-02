@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "coffee-log"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = ["André Wendler <42637005+a-wendler@users.noreply.github.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-streamlit = "^1.37.0"
+streamlit = "^1.38.0"
 SQLAlchemy = "^2.0.30"
 pymysql = "^1.1.1"
 loguru = "^0.7.2"
