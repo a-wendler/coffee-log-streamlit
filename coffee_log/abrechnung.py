@@ -16,6 +16,7 @@ def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
         return value.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
     return Decimal(value).quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
 
+
 def gesamt_abrechnung(datum):
     st.header("Gesamtabrechnung")
 
@@ -31,8 +32,14 @@ def gesamt_abrechnung(datum):
         "Gesamtkaffees:",
         get_coffee_number(monat=datum),
     )
-    monatseinnahmen = (get_coffee_number(monat=datum, gruppe="mitglied") * quantize_decimal(st.secrets.KAFFEEPREIS_MITGLIED)) + (get_coffee_number(monat=datum, gruppe="gast") * quantize_decimal(st.secrets.KAFFEEPREIS_GAST))
-    
+    monatseinnahmen = (
+        get_coffee_number(monat=datum, gruppe="mitglied")
+        * quantize_decimal(st.secrets.KAFFEEPREIS_MITGLIED)
+    ) + (
+        get_coffee_number(monat=datum, gruppe="gast")
+        * quantize_decimal(st.secrets.KAFFEEPREIS_GAST)
+    )
+
     st.write("Einnahmen: € ", monatseinnahmen)
     st.write("Verbrauchskosten: €", get_payment_sum(datum))
     st.write("Differenz: € ", monatseinnahmen - get_payment_sum(datum))
@@ -66,9 +73,11 @@ def gesamt_abrechnung(datum):
     st.subheader("Zahlungen")
     st.dataframe(
         payments_df,
-        column_config={"Betrag": st.column_config.NumberColumn(format="€ %.2f"), "Datum": st.column_config.DatetimeColumn(format="DD.MM.YYYY")},
+        column_config={
+            "Betrag": st.column_config.NumberColumn(format="€ %.2f"),
+            "Datum": st.column_config.DatetimeColumn(format="DD.MM.YYYY"),
+        },
     )
-
 
 
 class coffee_number_kwargs(TypedDict, total=False):
@@ -77,7 +86,9 @@ class coffee_number_kwargs(TypedDict, total=False):
     user_id: Optional[int] = None
 
 
-def get_coffee_number(**kwargs: coffee_number_kwargs) -> int:
+def get_coffee_number(
+    monat: datetime = datetime.now(), gruppe: str = "all", user_id: int = None
+) -> int:
     """
     Ermittelt die Anzahl von Kaffees.
 
@@ -91,11 +102,6 @@ def get_coffee_number(**kwargs: coffee_number_kwargs) -> int:
 
     return: int: Anzahl von Kaffees
     """
-    # Default values für kwargs
-    monat = kwargs.get("monat", datetime.now())
-    gruppe = kwargs.get("gruppe", "all")
-    user_id = kwargs.get("user_id", None)
-
     # Checken, ob die Argumente die richtigen Typen haben
     if not isinstance(monat, datetime):
         raise ValueError("Argument 'monat' muss ein datetime-Objekt sein")
@@ -163,12 +169,7 @@ def get_payments(month: datetime) -> List[Payment]:
         )
 
 
-class einzelabrechnung_kwargs(TypedDict):
-    datum: Optional[datetime] = datetime.now()
-    user_id: int
-
-
-def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
+def einzelabrechnung(user_id: int, datum: datetime = datetime.now()) -> Invoice:
     """
     Erstellt eine Einzelabrechnung für einen Nutzer.
 
@@ -179,9 +180,6 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
 
     returns: Invoice-Objekt
     """
-    # Default values für kwargs
-    datum = kwargs.get("datum", datetime.now())
-    user_id = kwargs.get("user_id")
 
     if not user_id:
         raise ValueError("Argument 'user_id' muss übergeben werden")
@@ -194,7 +192,7 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
 
     kaffee_anzahl = get_coffee_number(monat=datum, user_id=user_id)
     if kaffee_anzahl == 0:
-        return None # Nutzer hat keine Kaffees getrunken, es wird keine Rechnung zurückgegeben
+        return None  # Nutzer hat keine Kaffees getrunken, es wird keine Rechnung zurückgegeben
 
     with conn.session as einzelabrechnung_session:
         user = einzelabrechnung_session.scalar(select(User).where(User.id == user_id))
@@ -238,13 +236,15 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
         bezahlt = None
         if saldo > 0:  # Nutzer hat noch Guthaben
             if saldo - kaffee_preis < 0:  # Nutzer hat nicht genug Guthaben
-                gesamtbetrag = kaffee_preis - saldo # Guthaben wird verrechnet und Restbetrag ist fällig
+                gesamtbetrag = (
+                    kaffee_preis - saldo
+                )  # Guthaben wird verrechnet und Restbetrag ist fällig
             if saldo - kaffee_preis >= 0:  # Nutzer hat genug Guthaben
-                gesamtbetrag = quantize_decimal("0") # es ist keine Zahlung fällig
+                gesamtbetrag = quantize_decimal("0")  # es ist keine Zahlung fällig
                 bezahlt = datetime.now()
-        if saldo <= 0: # Nutzer hat kein Guthaben
+        if saldo <= 0:  # Nutzer hat kein Guthaben
             gesamtbetrag = quantize_decimal(kaffee_preis)
-    
+
     return Invoice(
         kaffee_anzahl=kaffee_anzahl,
         kaffee_preis=kaffee_preis,
@@ -259,13 +259,9 @@ def einzelabrechnung(**kwargs: einzelabrechnung_kwargs) -> Invoice:
     )
 
 
-class monatsliste_kwargs(TypedDict):
-    datum: Optional[datetime] = datetime.now()
-
 @st.cache_data
-def monatsliste(**kwargs: monatsliste_kwargs):
-    # Default values für kwargs
-    datum = kwargs.get("datum", datetime.now())
+def monatsliste(datum: datetime = datetime.now()) -> List[Invoice]:
+
     # Checken, ob die Argumente die richtigen Typen haben
     if not isinstance(datum, datetime):
         raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
@@ -302,7 +298,7 @@ def monatsbuchung(datum):
                 invoice.ts = datetime.now()
 
                 # Rechnungskorrektur, wenn Nutzer noch Guthaben hat
-                
+
                 local_session.add(invoice)
             local_session.commit()
             st.success("Buchung erfolgreich")
@@ -323,6 +319,7 @@ def confirm_monatsabrechnung():
     if st.button("Nein"):
         st.rerun()
 
+
 def send_all_invoices(liste: List[Invoice]):
     for invoice in liste:
         if not invoice.email_versand:
@@ -336,7 +333,6 @@ def send_all_invoices(liste: List[Invoice]):
 
 
 # Streamlit app layout
-# menu_with_redirect()
 if "invoice_status" not in st.session_state:
     st.session_state.invoice_status = {}
 conn = st.connection("coffee_counter", type="sql")
@@ -456,7 +452,9 @@ if datum:
                             args=(conn,),
                         )
                     if abrechnung.gesamtbetrag <= 0:
-                        st.write("Keine Zahlung fällig. Kaffeekosten wurden mit Guthaben verrechnet.")
+                        st.write(
+                            "Keine Zahlung fällig. Kaffeekosten wurden mit Guthaben verrechnet."
+                        )
 
             st.button(
                 "Alle Rechnungen senden",
