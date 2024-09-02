@@ -394,7 +394,7 @@ if datum:
                     "Zahlbetrag": st.column_config.NumberColumn(format="€ %g")
                 },
             )
-            st.write("Gesamtsumme:", df.Kaffeekosten.sum())
+            # st.write("Gesamtsumme:", df.Kaffeekosten.sum())
 
             monatsabrechnung = st.button(
                 f"Monatsabrechnung {uebersetzungen[datum.strftime("%B")]} erstellen"
