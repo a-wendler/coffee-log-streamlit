@@ -144,8 +144,7 @@ class User(Base):
             ).all()
             return invoices
         
-    def kaffee_liste(self, conn, **kwargs):
-        datum = kwargs.get("datum", None)
+    def kaffee_liste(self, conn, datum):
         if not isinstance(datum, datetime):
             raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
         with conn.session as session:
@@ -162,6 +161,19 @@ class User(Base):
             if not coffee_list:
                 return None
             return coffee_list
+    
+    def mietzahlung_eintragen(self, conn, datum):
+        with conn.session as session:
+            try:
+                mietzahlung = Mietzahlung(monat=datum, ts=datetime.now(), user_id=self.id)
+                session.add(mietzahlung)
+                session.commit()
+                logger.success(f"Mietzahlung für {datum} von {self.name} {self.vorname} eingetragen.")
+                return st.success("Mietzahlung erfolgreich eingetragen!")
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Mietzahlung für {datum} von {self.name} {self.vorname} konnte nicht eingetragen werden: {e}")
+                return st.error("Mietzahlung konnte nicht eingetragen werden.")
 
 
 class Invoice(Base):

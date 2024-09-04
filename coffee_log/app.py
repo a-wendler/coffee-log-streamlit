@@ -126,11 +126,12 @@ abrechnung = st.Page(
 guthaben_test = st.Page("guthaben_test.py", title="Guthaben Test")
 users = st.Page("users.py", title="Nutzer verwalten", icon=":material/people:")
 konto = st.Page("account.py", title="Kontostand", icon=":material/account_balance:")
+mietzahlungen = st.Page("mietzahlungen.py", title="Mietzahlungen", icon=":material/attach_money:")
 if "user" in st.session_state:
     standard_pages = [home, register]
 else:
     standard_pages = [home, register, login_page]
-admin_pages = [payments, abrechnung, users, konto]
+admin_pages = [payments, abrechnung, users, konto, mietzahlungen]
 login_pages = [
     my_coffee,
     logout_page,

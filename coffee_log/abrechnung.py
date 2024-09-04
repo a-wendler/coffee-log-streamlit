@@ -285,15 +285,6 @@ def monatsbuchung(datum):
     with conn.session as local_session:
         try:
             for invoice in monats_liste:
-                # payments = local_session.scalars(
-                #     select(Payment).where(
-                #         extract("month", Payment.ts) == datum.month,
-                #         extract("year", Payment.ts) == datum.year,
-                #         Payment.user == invoice.user,
-                #     )
-                # ).all()
-                # st.write(type(payments))
-                # invoice.payments = payments
                 invoice.monat = datum
                 invoice.ts = datetime.now()
 
