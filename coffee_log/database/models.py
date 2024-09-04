@@ -82,6 +82,7 @@ class User(Base):
     logs: Mapped[List[Log]] = relationship(back_populates="user")
     payments: Mapped[List[Payment]] = relationship(back_populates="user")
     invoices: Mapped[List["Invoice"]] = relationship(back_populates="user")
+    mietzahlungen: Mapped[List["Mietzahlung"]] = relationship(back_populates="user")
 
     def get_anzahl_monatskaffees(self, datum: datetime, conn) -> int:
         if not isinstance(datum, datetime):
@@ -285,3 +286,16 @@ Gesamtbetrag: {self.gesamtbetrag} €
                     f"Rechnung für {monat} an {self.user.email} konnte nicht per Email versandt werden: {e}"
                 )
                 return e
+
+class Mietzahlung(Base):
+    """Model für erfasste Mietzahlungen"""
+    __tablename__ = "mietzahlungen"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    monat: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    user: Mapped["User"] = relationship(back_populates="mietzahlungen")
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+
+if __name__ == "__main__":
+    pass
