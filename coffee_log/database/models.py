@@ -174,6 +174,17 @@ class User(Base):
                 session.rollback()
                 logger.error(f"Mietzahlung für {datum} von {self.name} {self.vorname} konnte nicht eingetragen werden: {e}")
                 return st.error("Mietzahlung konnte nicht eingetragen werden.")
+    
+    def get_mietzahlung_status(self, conn, datum):
+        with conn.session as session:
+            mietzahlung = session.scalar(select(Mietzahlung).where(
+                extract("month", Mietzahlung.monat) == datum.month,
+                extract("year", Mietzahlung.monat) == datum.year,
+                Mietzahlung.user_id == self.id,
+            ))
+            if mietzahlung:
+                return True
+            return False
 
 
 class Invoice(Base):
