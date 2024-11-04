@@ -141,6 +141,7 @@ passwort_reset_page = st.Page(set_new_password, title="Passwort zurücksetzen")
 # st.write(st.session_state)
 st.title("☕ LSB Kaffeeabrechnung")
 # st.write("dev")
+# st.write(st.secrets.connections.coffee_counter.database)
 
 page_dict = {}
 

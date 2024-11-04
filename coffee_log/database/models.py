@@ -112,14 +112,10 @@ class User(Base):
             return payments
 
     def get_saldo(self, conn) -> Decimal:
-        # positive Invoices als SOLL holen
-        # alle payments als HABEN holen
+
         with conn.session as session:
             invoice_sum = session.scalar(
-                # select(func.sum(Invoice.gesamtbetrag)).where(
-                #     Invoice.gesamtbetrag > 0,
-                #     Invoice.user_id == self.id,
-                # )
+
                 select(func.sum(Invoice.kaffee_preis)).where(
                     Invoice.user_id == self.id,
                 )
@@ -129,13 +125,13 @@ class User(Base):
 
             payment_sum = session.scalar(
                 select(func.sum(Payment.betrag)).where(
-                    Payment.user_id == self.id,
+                    Payment.user_id == self.id
                 )
             )
+
             if not payment_sum:
                 payment_sum = 0
         return payment_sum - invoice_sum
-        return 0
 
     def get_invoices(self, conn) -> List[Invoice]:
         with conn.session as session:

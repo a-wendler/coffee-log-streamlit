@@ -13,7 +13,7 @@ def zahlungsliste(conn):
 
         zahlungsliste = []
         for zahlung in payments:
-            if zahlung.typ in ["Auszahlung", "Einkauf"]:
+            if zahlung.typ in ["Einkauf"]:
                 zahlungsliste.append(
                     {
                         "Datum": zahlung.ts,
@@ -100,7 +100,7 @@ with col1:
     st.metric("Einzahlungen", "€ " + str(einzahlungen).replace(".", ","))
     st.metric("Auszahlungen", "€ " + str(auszahlungen).replace(".", ","))
     st.metric("Korrekturen", "€ " + str(korrekturen).replace(".", ","))
-    st.metric("Kassenstand", "€ " + str(einzahlungen - auszahlungen + korrekturen).replace(".", ","))
+    st.metric("Kassenstand", "€ " + str(einzahlungen + auszahlungen + korrekturen).replace(".", ","))
     st.metric("offene Rechnungen", "€ " + str(summe).replace(".", ","))
     
     st.metric("Einkäufe", "€ " + str(einkaeufe).replace(".", ","))

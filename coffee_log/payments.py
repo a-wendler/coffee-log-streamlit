@@ -20,6 +20,9 @@ def new_payment():
                 betrag=st.session_state.betrag,
                 ts=st.session_state.ts,
             )
+            if payment.typ == "Auszahlung":
+                payment.betrag = -payment.betrag
+
             payment.save(session)
             st.success("Zahlung wurde hinzugefügt!")
         except Exception as e:
