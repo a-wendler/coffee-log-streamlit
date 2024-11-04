@@ -146,7 +146,7 @@ def get_payment_sum(month: datetime) -> Decimal:
                 or_(
                     Payment.typ == "Einkauf",
                     Payment.typ == "Korrektur",
-                    Payment.typ == "Auszahlung",
+                    # Payment.typ == "Auszahlung",
                 ),
             )
             .scalar()
@@ -259,7 +259,7 @@ def einzelabrechnung(user_id: int, datum: datetime = datetime.now()) -> Invoice:
     )
 
 
-@st.cache_data
+# @st.cache_data
 def monatsliste(datum: datetime = datetime.now()) -> List[Invoice]:
 
     # Checken, ob die Argumente die richtigen Typen haben
@@ -285,15 +285,6 @@ def monatsbuchung(datum):
     with conn.session as local_session:
         try:
             for invoice in monats_liste:
-                # payments = local_session.scalars(
-                #     select(Payment).where(
-                #         extract("month", Payment.ts) == datum.month,
-                #         extract("year", Payment.ts) == datum.year,
-                #         Payment.user == invoice.user,
-                #     )
-                # ).all()
-                # st.write(type(payments))
-                # invoice.payments = payments
                 invoice.monat = datum
                 invoice.ts = datetime.now()
 

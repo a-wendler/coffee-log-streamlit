@@ -136,6 +136,12 @@ if datum:
                     ),
                 },
             )
+        st.subheader("Mietanteil")
+        if st.session_state.user.get_mietzahlung_status(conn, datum):
+            st.write("✅ Ihre Mietzahlung wurde diesen Monat bereits verbucht.")
+        else:
+            st.write("❌ Ihre Mietzahlung ist noch nicht eingegangen.")
+            
     st.subheader("Saldo insgesamt")
     widget_saldo()
     st.divider()

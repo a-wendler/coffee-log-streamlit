@@ -1,17 +1,18 @@
 [tool.poetry]
 name = "coffee-log"
-version = "0.2.0"
+version = "0.3.0"
 description = ""
 authors = ["André Wendler <42637005+a-wendler@users.noreply.github.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-streamlit = "^1.38.0"
+streamlit = "^1.39.0"
 SQLAlchemy = "^2.0.30"
 pymysql = "^1.1.1"
 loguru = "^0.7.2"
 cryptography = "^43.0.0"
+alembic = "^1.13.2"
 
 
 [build-system]

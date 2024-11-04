@@ -82,6 +82,7 @@ class User(Base):
     logs: Mapped[List[Log]] = relationship(back_populates="user")
     payments: Mapped[List[Payment]] = relationship(back_populates="user")
     invoices: Mapped[List["Invoice"]] = relationship(back_populates="user")
+    mietzahlungen: Mapped[List["Mietzahlung"]] = relationship(back_populates="user")
 
     def get_anzahl_monatskaffees(self, datum: datetime, conn) -> int:
         if not isinstance(datum, datetime):
@@ -111,14 +112,10 @@ class User(Base):
             return payments
 
     def get_saldo(self, conn) -> Decimal:
-        # positive Invoices als SOLL holen
-        # alle payments als HABEN holen
+
         with conn.session as session:
             invoice_sum = session.scalar(
-                # select(func.sum(Invoice.gesamtbetrag)).where(
-                #     Invoice.gesamtbetrag > 0,
-                #     Invoice.user_id == self.id,
-                # )
+
                 select(func.sum(Invoice.kaffee_preis)).where(
                     Invoice.user_id == self.id,
                 )
@@ -128,13 +125,13 @@ class User(Base):
 
             payment_sum = session.scalar(
                 select(func.sum(Payment.betrag)).where(
-                    Payment.user_id == self.id,
+                    Payment.user_id == self.id
                 )
             )
+
             if not payment_sum:
                 payment_sum = 0
         return payment_sum - invoice_sum
-        return 0
 
     def get_invoices(self, conn) -> List[Invoice]:
         with conn.session as session:
@@ -143,8 +140,7 @@ class User(Base):
             ).all()
             return invoices
         
-    def kaffee_liste(self, conn, **kwargs):
-        datum = kwargs.get("datum", None)
+    def kaffee_liste(self, conn, datum):
         if not isinstance(datum, datetime):
             raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
         with conn.session as session:
@@ -161,6 +157,30 @@ class User(Base):
             if not coffee_list:
                 return None
             return coffee_list
+    
+    def mietzahlung_eintragen(self, conn, datum):
+        with conn.session as session:
+            try:
+                mietzahlung = Mietzahlung(monat=datum, ts=datetime.now(), user_id=self.id)
+                session.add(mietzahlung)
+                session.commit()
+                logger.success(f"Mietzahlung für {datum} von {self.name} {self.vorname} eingetragen.")
+                return st.success("Mietzahlung erfolgreich eingetragen!")
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Mietzahlung für {datum} von {self.name} {self.vorname} konnte nicht eingetragen werden: {e}")
+                return st.error("Mietzahlung konnte nicht eingetragen werden.")
+    
+    def get_mietzahlung_status(self, conn, datum):
+        with conn.session as session:
+            mietzahlung = session.scalar(select(Mietzahlung).where(
+                extract("month", Mietzahlung.monat) == datum.month,
+                extract("year", Mietzahlung.monat) == datum.year,
+                Mietzahlung.user_id == self.id,
+            ))
+            if mietzahlung:
+                return True
+            return False
 
 
 class Invoice(Base):
@@ -285,3 +305,16 @@ Gesamtbetrag: {self.gesamtbetrag} €
                     f"Rechnung für {monat} an {self.user.email} konnte nicht per Email versandt werden: {e}"
                 )
                 return e
+
+class Mietzahlung(Base):
+    """Model für erfasste Mietzahlungen"""
+    __tablename__ = "mietzahlungen"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    monat: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    user: Mapped["User"] = relationship(back_populates="mietzahlungen")
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+
+if __name__ == "__main__":
+    pass

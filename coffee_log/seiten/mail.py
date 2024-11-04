@@ -1,7 +1,4 @@
 import streamlit as st
-from sqlalchemy import select
-# from models import Invoice, User
-from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 
@@ -66,18 +63,4 @@ def send_reset_email(receiver_email, token):
     except Exception as e:
         return e
 
-conn = st.connection("coffee_counter", type="sql")
-uebersetzungen = {
-    "January": "Januar",
-    "February": "Februar",
-    "March": "März",
-    "April": "April",
-    "May": "Mai",
-    "June": "Juni",
-    "July": "Juli",
-    "August": "August",
-    "September": "September",
-    "October": "Oktober",
-    "November": "November",
-    "December": "Dezember",
-}
+# conn = st.connection("coffee_counter", type="sql")
