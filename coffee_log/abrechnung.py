@@ -1,15 +1,30 @@
 from datetime import datetime
 from typing import List, TypedDict, Optional, Union
 from decimal import Decimal
+from contextlib import contextmanager
 import pandas as pd
 import streamlit as st
 from sqlalchemy import select, extract, func, or_
+from sqlalchemy.pool import QueuePool
 from loguru import logger
 
 # from menu import menu_with_redirect
 from helpers import get_first_days_of_last_six_months
 from database.models import Log, User, Payment, Invoice
 
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections"""
+    try:
+        with conn.session as session:
+            yield session
+            session.commit()
+    except Exception as e:
+        logger.error(f"Database error: {e}")
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
     if isinstance(value, Decimal):
@@ -44,8 +59,8 @@ def gesamt_abrechnung(datum):
     st.write("Verbrauchskosten: €", get_payment_sum(datum))
     st.write("Differenz: € ", monatseinnahmen - get_payment_sum(datum))
 
-    with conn.session as local_session:
-        payments = local_session.scalars(
+    with get_db_connection() as session:
+        payments = session.scalars(
             select(Payment)
             .join(User)
             .where(
@@ -110,7 +125,7 @@ def get_coffee_number(
     if user_id and not isinstance(user_id, int):
         raise ValueError("Argument 'user_id' muss ein Integer sein")
 
-    with conn.session as coffee_number_session:
+    with get_db_connection() as session:
         coffee_number_stmt = select(func.sum(Log.anzahl)).where(
             extract("month", Log.ts) == monat.month,
             extract("year", Log.ts) == monat.year,
@@ -118,7 +133,7 @@ def get_coffee_number(
 
         if user_id:
             coffee_number_stmt = coffee_number_stmt.where(Log.user_id == user_id)
-            kaffeemenge = coffee_number_session.scalar(coffee_number_stmt)
+            kaffeemenge = session.scalar(coffee_number_stmt)
             if kaffeemenge:
                 if kaffeemenge > 0:
                     return kaffeemenge
@@ -128,7 +143,7 @@ def get_coffee_number(
         if gruppe == "gast":
             coffee_number_stmt = coffee_number_stmt.join(User).where(User.mitglied == 0)
 
-        kaffeemenge = coffee_number_session.scalar(coffee_number_stmt)
+        kaffeemenge = session.scalar(coffee_number_stmt)
 
     if kaffeemenge:
         if kaffeemenge > 0:
@@ -137,9 +152,9 @@ def get_coffee_number(
 
 
 def get_payment_sum(month: datetime) -> Decimal:
-    with conn.session as get_payment_session:
+    with get_db_connection() as session:
         betrag = (
-            get_payment_session.query(func.sum(Payment.betrag))
+            session.query(func.sum(Payment.betrag))
             .filter(
                 extract("month", Payment.ts) == month.month,
                 extract("year", Payment.ts) == month.year,
@@ -158,9 +173,9 @@ def get_payment_sum(month: datetime) -> Decimal:
 
 
 def get_payments(month: datetime) -> List[Payment]:
-    with conn.session as local_session:
+    with get_db_connection() as session:
         return (
-            local_session.query(Payment)
+            session.query(Payment)
             .filter(
                 extract("month", Payment.ts) == month.month,
                 extract("year", Payment.ts) == month.year,
@@ -194,8 +209,8 @@ def einzelabrechnung(user_id: int, datum: datetime = datetime.now()) -> Invoice:
     if kaffee_anzahl == 0:
         return None  # Nutzer hat keine Kaffees getrunken, es wird keine Rechnung zurückgegeben
 
-    with conn.session as einzelabrechnung_session:
-        user = einzelabrechnung_session.scalar(select(User).where(User.id == user_id))
+    with get_db_connection() as session:
+        user = session.scalar(select(User).where(User.id == user_id))
 
         payments_stmt = select(Payment).where(
             extract("month", Payment.ts) == datum.month,
@@ -208,7 +223,7 @@ def einzelabrechnung(user_id: int, datum: datetime = datetime.now()) -> Invoice:
             ),
         )
 
-        payments = einzelabrechnung_session.scalars(payments_stmt).all()
+        payments = session.scalars(payments_stmt).all()
 
         betrag_stmt = select(func.sum(Payment.betrag)).where(
             extract("month", Payment.ts) == datum.month,
@@ -221,7 +236,7 @@ def einzelabrechnung(user_id: int, datum: datetime = datetime.now()) -> Invoice:
             ),
         )
 
-        payment_betrag = einzelabrechnung_session.scalar(betrag_stmt)
+        payment_betrag = session.scalar(betrag_stmt)
         if not payment_betrag:
             payment_betrag = quantize_decimal("0")
 
@@ -266,13 +281,13 @@ def monatsliste(datum: datetime = datetime.now()) -> List[Invoice]:
     if not isinstance(datum, datetime):
         raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
 
-    with conn.session as local_session:
+    with get_db_connection() as session:
         stmt = (
             select(User)
             .filter(User.status == "active")
             .order_by(User.name, User.vorname)
         )
-        users = local_session.scalars(stmt).all()
+        users = session.scalars(stmt).all()
         abrechnungen_list = []
         for user in users:
             rechnung = einzelabrechnung(datum=datum, user_id=user.id)
@@ -282,7 +297,7 @@ def monatsliste(datum: datetime = datetime.now()) -> List[Invoice]:
 
 
 def monatsbuchung(datum):
-    with conn.session as local_session:
+    with get_db_connection() as session:
         try:
             for invoice in monats_liste:
                 invoice.monat = datum
@@ -290,13 +305,13 @@ def monatsbuchung(datum):
 
                 # Rechnungskorrektur, wenn Nutzer noch Guthaben hat
 
-                local_session.add(invoice)
-            local_session.commit()
+                session.add(invoice)
+            session.commit()
             st.success("Buchung erfolgreich")
         except Exception as e:
             st.error("Fehler bei der Buchung")
             logger.error(f"Fehler bei der Buchung: {e}")
-            local_session.rollback()
+            session.rollback()
 
 
 @st.dialog("Monatsabrechnung erstellen?")
@@ -326,7 +341,22 @@ def send_all_invoices(liste: List[Invoice]):
 # Streamlit app layout
 if "invoice_status" not in st.session_state:
     st.session_state.invoice_status = {}
-conn = st.connection("coffee_counter", type="sql")
+# conn = st.connection("coffee_counter", type="sql")
+
+# Replace the existing connection setup with pooled connection
+conn = st.connection(
+    "coffee_counter",
+    type="sql",
+    engine_kwargs={
+        "pool_size": 5,  # Base number of connections to maintain
+        "max_overflow": 10,  # Allow up to 10 connections beyond pool_size
+        "pool_timeout": 30,  # Seconds to wait before timing out
+        "pool_recycle": 1800,  # Recycle connections after 30 minutes
+        "pool_pre_ping": True,  # Verify connection validity before checkout
+        "poolclass": QueuePool
+    }
+)[1]
+
 st.subheader("Abrechnung")
 
 uebersetzungen = {
@@ -354,7 +384,7 @@ if datum:
     gesamt_abrechnung(datum)
     # st.write(datum)
     st.subheader("Einzelabrechnungen")
-    with conn.session as session:
+    with get_db_connection() as session:
         anzahl_invoices = session.scalar(
             select(func.count(Invoice.id)).where(
                 extract("month", Invoice.monat) == datum.month,
@@ -396,7 +426,7 @@ if datum:
         st.write(
             f"Abrechnungen für {uebersetzungen[datum.strftime('%B')]} wurden bereits gebucht"
         )
-        with conn.session as session:
+        with get_db_connection() as session:
             monats_liste = session.scalars(
                 select(Invoice).where(
                     extract("month", Invoice.monat) == datum.month,
