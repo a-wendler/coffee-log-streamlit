@@ -159,6 +159,9 @@ if datum:
             "Rechnungsmonat": st.column_config.DatetimeColumn(
                 "Rechnungsmonat", format="MMM YYYY"
             ),
+            "Einkäufe etc.": st.column_config.NumberColumn(
+                "Einkäufe etc.", format="€ %g"
+            ),
             "bezahlt": st.column_config.DatetimeColumn(
                 "bezahlt am", format="DD.MM.YYYY"
             ),
