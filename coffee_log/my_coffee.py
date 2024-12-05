@@ -75,6 +75,7 @@ def widget_invoices(conn):
             "Zahlbetrag": invoice.gesamtbetrag,
             "Kaffeekosten": invoice.kaffee_preis,
             "Kaffeeanzahl": invoice.kaffee_anzahl,
+            "Einkäufe etc.": invoice.payment_betrag,
             "bezahlt": invoice.bezahlt,
             "E-Mail-Versand am": invoice.email_versand,
         }
