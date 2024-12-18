@@ -126,17 +126,21 @@ abrechnung = st.Page(
 guthaben_test = st.Page("guthaben_test.py", title="Guthaben Test")
 users = st.Page("users.py", title="Nutzer verwalten", icon=":material/people:")
 konto = st.Page("account.py", title="Kontostand", icon=":material/account_balance:")
-mietzahlungen = st.Page("mietzahlungen.py", title="Mietzahlungen", icon=":material/attach_money:")
+mietzahlungen = st.Page(
+    "mietzahlungen.py", title="Mietzahlungen", icon=":material/attach_money:"
+)
+abrechnung_neu = st.Page("abrechnung_neu.py", title="Abrechnung neu")
 if "user" in st.session_state:
     standard_pages = [home, register]
 else:
     standard_pages = [home, register, login_page]
-admin_pages = [payments, abrechnung, users, konto, mietzahlungen]
+admin_pages = [payments, abrechnung, users, konto, mietzahlungen, abrechnung_neu]
 login_pages = [
     my_coffee,
     logout_page,
 ]
 passwort_reset_page = st.Page(set_new_password, title="Passwort zurücksetzen")
+
 
 # st.write(st.session_state)
 st.title("☕ LSB Kaffeeabrechnung")

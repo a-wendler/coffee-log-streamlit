@@ -12,6 +12,7 @@ from loguru import logger
 from helpers import get_first_days_of_last_six_months
 from database.models import Log, User, Payment, Invoice
 
+
 @contextmanager
 def get_db_connection():
     """Context manager for database connections"""
@@ -25,6 +26,7 @@ def get_db_connection():
         raise
     finally:
         session.close()
+
 
 def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
     if isinstance(value, Decimal):
@@ -338,6 +340,21 @@ def send_all_invoices(liste: List[Invoice]):
                 )
 
 
+def create_db_url():
+    # Get database credentials from secrets.toml
+    db_username = st.secrets.connections.coffee_counter["username"]
+    db_password = st.secrets.connections.coffee_counter["password"]
+    db_host = st.secrets.connections.coffee_counter["host"]
+    db_port = st.secrets.connections.coffee_counter["port"]
+    db_name = st.secrets.connections.coffee_counter["database"]
+
+    # Construct database URL
+    db_url = (
+        f"mysql+pymysql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
+    )
+    return db_url
+
+
 # Streamlit app layout
 if "invoice_status" not in st.session_state:
     st.session_state.invoice_status = {}
@@ -347,15 +364,14 @@ if "invoice_status" not in st.session_state:
 conn = st.connection(
     "coffee_counter",
     type="sql",
-    engine_kwargs={
-        "pool_size": 5,  # Base number of connections to maintain
-        "max_overflow": 10,  # Allow up to 10 connections beyond pool_size
-        "pool_timeout": 30,  # Seconds to wait before timing out
-        "pool_recycle": 1800,  # Recycle connections after 30 minutes
-        "pool_pre_ping": True,  # Verify connection validity before checkout
-        "poolclass": QueuePool
-    }
-)[1]
+    url=create_db_url(),
+    pool_size=5,  # Base number of connections to maintain
+    max_overflow=10,  # Allow up to 10 connections beyond pool_size
+    pool_timeout=30,  # Seconds to wait before timing out
+    pool_recycle=1800,  # Recycle connections after 30 minutes
+    pool_pre_ping=True,  # Verify connection validity before checkout
+    poolclass=QueuePool,
+)
 
 st.subheader("Abrechnung")
 
@@ -386,7 +402,9 @@ if datum:
     st.subheader("Einzelabrechnungen")
     with get_db_connection() as session:
         anzahl_invoices = session.scalar(
-            select(func.count(Invoice.id)).where(
+            select(func.count(Invoice.id))
+            .join(User)
+            .where(
                 extract("month", Invoice.monat) == datum.month,
                 extract("year", Invoice.monat) == datum.year,
             )
