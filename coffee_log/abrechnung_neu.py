@@ -47,9 +47,7 @@ def create_db_url():
     )
     return db_url
 
-
 def monatsliste(session, datum: datetime = datetime.now()) -> List[Invoice]:
-    # with get_db_connection() as session:
     users = (
         session.scalars(
             select(User).options(
@@ -77,12 +75,9 @@ def monatsliste(session, datum: datetime = datetime.now()) -> List[Invoice]:
     invoices = []
     for user in users:
 
-        kaffee_anzahl = 0
-        for log in user.logs:
-            kaffee_anzahl += log.anzahl
-        payment_betrag = 0
-        for payment in user.payments:
-            payment_betrag += payment.betrag
+        kaffee_anzahl = sum(log.anzahl for log in user.logs)
+        payment_betrag = sum(payment.betrag for payment in user.payments)
+        
         kaffee_preis = (
             kaffee_anzahl * quantize_decimal(st.secrets.KAFFEEPREIS_MITGLIED)
             if user.mitglied
@@ -117,6 +112,30 @@ def monatsliste(session, datum: datetime = datetime.now()) -> List[Invoice]:
         )
     return invoices
 
+@st.dialog("Monatsabrechnung erstellen?")
+def confirm_monatsabrechnung():
+    st.write(
+        "Wollen Sie die Monatsabrechnung wirklich erstellen und die Rechnungen einbuchen?"
+    )
+    if st.button("Ja"):
+        monatsbuchung(datum)
+        st.rerun()
+    if st.button("Nein"):
+        st.rerun()
+
+def monatsbuchung(datum):
+    with get_db_connection() as session:
+        try:
+            for invoice in monats_liste:
+                invoice.monat = datum
+                invoice.ts = datetime.now()
+                session.add(invoice)
+            session.commit()
+            st.success("Buchung erfolgreich")
+        except Exception as e:
+            st.error("Fehler bei der Buchung")
+            logger.error(f"Fehler bei der Buchung: {e}")
+            session.rollback()
 
 # Main Application
 
@@ -162,6 +181,7 @@ if datum:
                 extract("month", Invoice.monat) == datum.month,
                 extract("year", Invoice.monat) == datum.year,
             )
+            .order_by(User.name)
         ).all()
         anzahl_invoices = len(invoices)
 
@@ -188,6 +208,11 @@ if datum:
                     "Zahlbetrag": st.column_config.NumberColumn(format="€ %g")
                 },
             )
+            monatsabrechnung = st.button(
+                f"Monatsabrechnung {uebersetzungen[datum.strftime("%B")]} erstellen"
+            )
+            if monatsabrechnung:
+                confirm_monatsabrechnung()
         elif anzahl_invoices > 0:
             for abrechnung in invoices:
                 if abrechnung.bezahlt:
@@ -225,7 +250,7 @@ if datum:
                             "Rechnung als bezahlt markieren",
                             key=f"paid_{abrechnung.id}",
                             on_click=abrechnung.mark_as_paid,
-                            args=(conn,),
+                            args=(session,),
                         )
                     if abrechnung.gesamtbetrag <= 0:
                         st.write(
