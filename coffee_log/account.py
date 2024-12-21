@@ -62,7 +62,7 @@ st.title("Kontoübersicht")
 zahlungen = zahlungsliste(conn)
 df_zahlungen = pd.DataFrame(zahlungen)
 
-einzahlungen =  df_zahlungen[df_zahlungen["Typ"] == "Einzahlung"].sum()["Betrag"]
+einzahlungen = df_zahlungen[df_zahlungen["Typ"] == "Einzahlung"].sum()["Betrag"]
 einkaeufe = df_zahlungen[df_zahlungen["Typ"] == "Einkauf"].sum()["Betrag"]
 auszahlungen = df_zahlungen[df_zahlungen["Typ"] == "Auszahlung"].sum()["Betrag"]
 korrekturen = df_zahlungen[df_zahlungen["Typ"] == "Korrektur"].sum()["Betrag"]
@@ -100,9 +100,12 @@ with col1:
     st.metric("Einzahlungen", "€ " + str(einzahlungen).replace(".", ","))
     st.metric("Auszahlungen", "€ " + str(auszahlungen).replace(".", ","))
     st.metric("Korrekturen", "€ " + str(korrekturen).replace(".", ","))
-    st.metric("Kassenstand", "€ " + str(einzahlungen + auszahlungen + korrekturen).replace(".", ","))
+    st.metric(
+        "Kassenstand",
+        "€ " + str(einzahlungen + auszahlungen + korrekturen).replace(".", ","),
+    )
     st.metric("offene Rechnungen", "€ " + str(summe).replace(".", ","))
-    
+
     st.metric("Einkäufe", "€ " + str(einkaeufe).replace(".", ","))
 
 with col2:
@@ -111,20 +114,26 @@ with col2:
     st.metric("Kaffeeanzahl Gäste", str(kaffeeanzahl_gaeste))
     st.metric("Kaffeeanzahl gesamt", str(kaffeeanzahl_mitglieder + kaffeeanzahl_gaeste))
     st.metric("Summe der Guthaben", "€ " + str(summe_positiv).replace(".", ","))
-    st.metric("Überschuss", "€ " + str(mitgliedskosten + gastkosten + einkaeufe).replace(".", ","))
-    
+    st.metric(
+        "Überschuss",
+        "€ " + str(mitgliedskosten + gastkosten + einkaeufe).replace(".", ","),
+    )
+
 with col3:
     st.metric("Kaffeeumsatz Mitglieder", "€ " + str(mitgliedskosten).replace(".", ","))
     st.metric("Kaffeeumsatz Gäste", "€ " + str(gastkosten).replace(".", ","))
-    st.metric("Kaffeeumsatz gesamt", "€ " + str(mitgliedskosten + gastkosten).replace(".", ","))
+    st.metric(
+        "Kaffeeumsatz gesamt",
+        "€ " + str(mitgliedskosten + gastkosten).replace(".", ","),
+    )
 
-st.dataframe(
-    df_zahlungen,
-    column_config={
-        "Betrag": st.column_config.NumberColumn(format="€ %g"),
-        "Datum": st.column_config.DatetimeColumn(format="DD.MM.YY"),
-    },
-)
+# st.dataframe(
+#     df_zahlungen,
+#     column_config={
+#         "Betrag": st.column_config.NumberColumn(format="€ %g"),
+#         "Datum": st.column_config.DatetimeColumn(format="DD.MM.YY"),
+#     },
+# )
 
 st.subheader("offene Rechnungen")
 

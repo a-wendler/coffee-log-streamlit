@@ -129,12 +129,11 @@ konto = st.Page("account.py", title="Kontostand", icon=":material/account_balanc
 mietzahlungen = st.Page(
     "mietzahlungen.py", title="Mietzahlungen", icon=":material/attach_money:"
 )
-abrechnung_neu = st.Page("abrechnung_neu.py", title="Abrechnung neu")
 if "user" in st.session_state:
     standard_pages = [home, register]
 else:
     standard_pages = [home, register, login_page]
-admin_pages = [payments, abrechnung, users, konto, mietzahlungen, abrechnung_neu]
+admin_pages = [payments, abrechnung, users, konto, mietzahlungen]
 login_pages = [
     my_coffee,
     logout_page,
