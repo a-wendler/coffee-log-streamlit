@@ -9,7 +9,6 @@ from helpers import get_first_days_of_last_six_months
 from decimal import Decimal
 from typing import List, Union
 from datetime import datetime
-import pandas as pd
 
 
 @contextmanager
@@ -18,7 +17,7 @@ def get_db_connection():
     try:
         with conn.session as session:
             yield session
-            session.commit()
+            # session.commit()
     except Exception as e:
         logger.error(f"Database error: {e}")
         session.rollback()
@@ -47,37 +46,17 @@ def create_db_url():
     )
     return db_url
 
+
 def monatsliste(session, datum: datetime = datetime.now()) -> List[Invoice]:
-    users = (
-        session.scalars(
-            select(User).options(
-                selectinload(
-                    User.payments.and_(
-                        extract("month", Payment.ts) == datum.month,
-                        extract("year", Payment.ts) == datum.year,
-                        or_(
-                            Payment.typ == "Einkauf",
-                            Payment.typ == "Korrektur",
-                            Payment.typ == "Auszahlung",
-                        ),
-                    )
-                ),
-                selectinload(
-                    User.logs.and_(
-                        extract("month", Log.ts) == datum.month,
-                        extract("year", Log.ts) == datum.year,
-                    )
-                ),
-            )
-        )
-    ).all()
 
     invoices = []
-    for user in users:
+    for user in st.session_state[datum]["users"]:
 
         kaffee_anzahl = sum(log.anzahl for log in user.logs)
+        if kaffee_anzahl == 0:
+            continue
         payment_betrag = sum(payment.betrag for payment in user.payments)
-        
+
         kaffee_preis = (
             kaffee_anzahl * quantize_decimal(st.secrets.KAFFEEPREIS_MITGLIED)
             if user.mitglied
@@ -110,7 +89,8 @@ def monatsliste(session, datum: datetime = datetime.now()) -> List[Invoice]:
                 bezahlt=bezahlt,
             )
         )
-    return invoices
+    st.session_state[datum]["invoices"] = invoices
+
 
 @st.dialog("Monatsabrechnung erstellen?")
 def confirm_monatsabrechnung():
@@ -123,10 +103,11 @@ def confirm_monatsabrechnung():
     if st.button("Nein"):
         st.rerun()
 
+
 def monatsbuchung(datum):
     with get_db_connection() as session:
         try:
-            for invoice in monats_liste:
+            for invoice in st.session_state[datum]["invoices"]:
                 invoice.monat = datum
                 invoice.ts = datetime.now()
                 session.add(invoice)
@@ -136,6 +117,7 @@ def monatsbuchung(datum):
             st.error("Fehler bei der Buchung")
             logger.error(f"Fehler bei der Buchung: {e}")
             session.rollback()
+
 
 # Main Application
 
@@ -172,7 +154,10 @@ datum = st.selectbox(
     format_func=lambda x: uebersetzungen[x.strftime("%B")] + " " + x.strftime("%Y"),
 )
 
+st.write(st.session_state)
 if datum:
+    if datum not in st.session_state:
+        st.session_state[datum] = {}
     with get_db_connection() as session:
         invoices = session.scalars(
             select(Invoice)
@@ -183,37 +168,122 @@ if datum:
             )
             .order_by(User.name)
         ).all()
-        anzahl_invoices = len(invoices)
 
-        st.write("Anzahl gebuchte Einzelabrechnungen:", anzahl_invoices)
-        if anzahl_invoices < 1:
-            monats_liste = monatsliste(session, datum=datum)
-            show_liste = []
-            for abrechnung in monats_liste:
-                show_liste.append(
-                    {
-                        "Name": abrechnung.user.name,
-                        "Zahlbetrag": quantize_decimal(abrechnung.gesamtbetrag),
-                        "Kaffeeanzahl": abrechnung.kaffee_anzahl,
-                        "Kaffeekosten": abrechnung.kaffee_preis,
-                        "Einkäufe": abrechnung.payment_betrag,
-                        "Guthaben alt": abrechnung.user.get_saldo(conn),
-                    }
+        # wenn für den gewählten Monat noch keine Rechnungen gebucht wurden
+        if len(invoices) < 1:
+            st.write("Es wurden noch keine Rechnungen für diesen Monat gebucht.")
+            if "users" not in st.session_state[datum]:
+                st.session_state[datum]["users"] = (
+                    session.scalars(
+                        select(User)
+                        .options(
+                            selectinload(
+                                User.payments.and_(
+                                    extract("month", Payment.ts) == datum.month,
+                                    extract("year", Payment.ts) == datum.year,
+                                    or_(
+                                        Payment.typ == "Einkauf",
+                                        Payment.typ == "Korrektur",
+                                        Payment.typ == "Auszahlung",
+                                    ),
+                                )
+                            ),
+                            selectinload(
+                                User.logs.and_(
+                                    extract("month", Log.ts) == datum.month,
+                                    extract("year", Log.ts) == datum.year,
+                                )
+                            ),
+                        )
+                        .order_by(User.name)
+                    )
+                ).all()
+
+            # Gesamtabrechnung
+            st.subheader("Gesamtabrechnung")
+            mitgliederkaffees = 0
+            gastkaffees = 0
+            zahlungssumme = quantize_decimal("0")
+            for user in st.session_state[datum]["users"]:
+                session.add(user)
+                mitgliederkaffees += sum(
+                    log.anzahl for log in user.logs if user.mitglied
+                )
+                gastkaffees += sum(log.anzahl for log in user.logs if not user.mitglied)
+                zahlungssumme += sum(
+                    payment.betrag
+                    for payment in user.payments
+                    if payment.typ in ["Einkauf", "Korrektur"]
                 )
 
-            df = pd.DataFrame().from_records(show_liste)
-            table = st.dataframe(
-                df,
+            monatseinnahmen = mitgliederkaffees * quantize_decimal(
+                st.secrets.KAFFEEPREIS_MITGLIED
+            ) + gastkaffees * quantize_decimal(st.secrets.KAFFEEPREIS_GAST)
+            ueberschuss = monatseinnahmen - zahlungssumme
+
+            st.write("Mitgliederkaffees:", mitgliederkaffees)
+            st.write("Gastkaffees:", gastkaffees)
+            st.write("Gesamtkaffees:", mitgliederkaffees + gastkaffees)
+            st.write("Monatseinnahmen: € ", monatseinnahmen)
+            st.write("Verbrauchskosten: € ", zahlungssumme)
+            st.write("Überschuss: € ", ueberschuss)
+
+            # Zahlungen
+            st.subheader("Zahlungen")
+
+            payment_list = []
+
+            for user in st.session_state[datum]["users"]:
+                payment_list.extend(
+                    [
+                        {
+                            "Datum": payment.ts,
+                            "Betreff": payment.betreff,
+                            "Betrag": payment.betrag,
+                            "Typ": payment.typ,
+                            "Nutzer": payment.user.name,
+                        }
+                        for payment in user.payments
+                        if payment.typ in ["Einkauf", "Korrektur", "Auszahlung"]
+                    ]
+                )
+
+            st.dataframe(
+                payment_list,
                 column_config={
-                    "Zahlbetrag": st.column_config.NumberColumn(format="€ %g")
+                    "Betrag": st.column_config.NumberColumn(format="€ %.2f"),
+                    "Datum": st.column_config.DatetimeColumn(format="DD.MM.YYYY"),
                 },
             )
-            monatsabrechnung = st.button(
-                f"Monatsabrechnung {uebersetzungen[datum.strftime("%B")]} erstellen"
-            )
-            if monatsabrechnung:
-                confirm_monatsabrechnung()
-        elif anzahl_invoices > 0:
+            st.subheader("Einzelabrechnungen")
+            with st.spinner("Einzelabrechnungen werden erstellt …"):
+                if "invoices" not in st.session_state[datum]:
+                    monatsliste(session, datum=datum)
+                show_liste = []
+
+                table = st.dataframe(
+                    [
+                        {
+                            "Name": abrechnung.user.name,
+                            "Zahlbetrag": quantize_decimal(abrechnung.gesamtbetrag),
+                            "Kaffeeanzahl": abrechnung.kaffee_anzahl,
+                            "Kaffeekosten": abrechnung.kaffee_preis,
+                            "Einkäufe": abrechnung.payment_betrag,
+                            "Guthaben alt": abrechnung.user.get_saldo(conn),
+                        }
+                        for abrechnung in st.session_state[datum]["invoices"]
+                    ],
+                    column_config={
+                        "Zahlbetrag": st.column_config.NumberColumn(format="€ %g")
+                    },
+                )
+                monatsabrechnung = st.button(
+                    f"Monatsabrechnung {uebersetzungen[datum.strftime("%B")]} erstellen"
+                )
+                if monatsabrechnung:
+                    confirm_monatsabrechnung()
+        # wenn für den gewählten Monat bereits Rechnungen gebucht wurden
+        elif len(invoices) > 0:
             for abrechnung in invoices:
                 if abrechnung.bezahlt:
                     bezahlt_icon = "✅"
