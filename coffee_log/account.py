@@ -1,100 +1,127 @@
 import streamlit as st
-import pandas as pd
-from sqlalchemy import select, func
+from contextlib import contextmanager
+from sqlalchemy.pool import QueuePool
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from loguru import logger
+from database.models import User
 from decimal import Decimal
 
-from database.models import User, Payment, Invoice, Log
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections"""
+    try:
+        with conn.session as session:
+            yield session
+            # session.commit()
+    except Exception as e:
+        logger.error(f"Database error: {e}")
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
-def zahlungsliste(conn):
-    with conn.session as session:
-        payments_stmt = select(Payment).order_by(Payment.ts.desc())
-        payments = session.scalars(payments_stmt).all()
+def create_db_url():
+    # Get database credentials from secrets.toml
+    db_username = st.secrets.connections.coffee_counter["username"]
+    db_password = st.secrets.connections.coffee_counter["password"]
+    db_host = st.secrets.connections.coffee_counter["host"]
+    db_port = st.secrets.connections.coffee_counter["port"]
+    db_name = st.secrets.connections.coffee_counter["database"]
 
-        zahlungsliste = []
-        for zahlung in payments:
-            if zahlung.typ in ["Einkauf"]:
-                zahlungsliste.append(
-                    {
-                        "Datum": zahlung.ts,
-                        "Betrag": -zahlung.betrag,
-                        "Typ": zahlung.typ,
-                        "Betreff": zahlung.betreff,
-                        "Nutzer": zahlung.user.name,
-                    }
-                )
-            else:
-                zahlungsliste.append(
-                    {
-                        "Datum": zahlung.ts,
-                        "Betrag": zahlung.betrag,
-                        "Typ": zahlung.typ,
-                        "Betreff": zahlung.betreff,
-                        "Nutzer": zahlung.user.name,
-                    }
-                )
-        return zahlungsliste
+    # Construct database URL
+    db_url = (
+        f"mysql+pymysql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
+    )
+    return db_url
 
 
-@st.cache_data(ttl=180)
-def offene_rechnungen(_conn):
-    with conn.session as session:
-        rechnungen = session.scalars(
-            select(Invoice).where(Invoice.bezahlt == None)
-        ).all()
-        return (
-            [
-                {
-                    "Datum": rechnung.ts,
-                    "Betrag": rechnung.gesamtbetrag,
-                    "Nutzer": rechnung.user.name,
-                }
-                for rechnung in rechnungen
-            ],
-            sum([rechnung.gesamtbetrag for rechnung in rechnungen]),
+conn = st.connection(
+    "coffee_counter",
+    type="sql",
+    url=create_db_url(),
+    pool_size=5,  # Base number of connections to maintain
+    max_overflow=10,  # Allow up to 10 connections beyond pool_size
+    pool_timeout=30,  # Seconds to wait before timing out
+    pool_recycle=1800,  # Recycle connections after 30 minutes
+    pool_pre_ping=True,  # Verify connection validity before checkout
+    poolclass=QueuePool,
+)
+
+with get_db_connection() as session:
+    users = (
+        session.scalars(
+            select(User)
+            .options(
+                selectinload(User.payments),
+                selectinload(User.invoices),
+                selectinload(User.logs),
+            )
+            .order_by(User.name)
         )
+    ).all()
 
+    einzahlungen = 0
+    einkaeufe = 0
+    auszahlungen = 0
+    korrekturen = 0
+    offene_rechnungen = []
+    offene_rechnungen_summe = 0
+    mitgliederkaffees = 0
+    gastkaffees = 0
+    saldi = []
+    summe_positiv = 0
 
-# Streamlit app layout
-conn = st.connection("coffee_counter", type="sql")
+    for user in users:
+        for payment in user.payments:
+            if payment.typ == "Einzahlung":
+                einzahlungen += payment.betrag
+            elif payment.typ == "Einkauf":
+                einkaeufe -= payment.betrag
+            elif payment.typ == "Auszahlung":
+                auszahlungen += payment.betrag
+            elif payment.typ == "Korrektur":
+                korrekturen += payment.betrag
 
-st.title("Kontoübersicht")
-zahlungen = zahlungsliste(conn)
-df_zahlungen = pd.DataFrame(zahlungen)
+        for invoice in user.invoices:
+            if invoice.bezahlt is None:
+                offene_rechnungen.append(
+                    {
+                        "Datum": invoice.ts,
+                        "Betrag": invoice.gesamtbetrag,
+                        "Nutzer": invoice.user.name,
+                    }
+                )
+                offene_rechnungen_summe += invoice.gesamtbetrag
 
-einzahlungen = df_zahlungen[df_zahlungen["Typ"] == "Einzahlung"].sum()["Betrag"]
-einkaeufe = df_zahlungen[df_zahlungen["Typ"] == "Einkauf"].sum()["Betrag"]
-auszahlungen = df_zahlungen[df_zahlungen["Typ"] == "Auszahlung"].sum()["Betrag"]
-korrekturen = df_zahlungen[df_zahlungen["Typ"] == "Korrektur"].sum()["Betrag"]
+        if user.mitglied:
+            for log in user.logs:
+                mitgliederkaffees += log.anzahl
+        else:
+            for log in user.logs:
 
-with conn.session as session:
-    kaffeeanzahl_mitglieder = session.scalar(
-        select(func.sum(Log.anzahl)).join(User).where(User.mitglied == 1)
-    )
-    kaffeeanzahl_gaeste = session.scalar(
-        select(func.sum(Log.anzahl)).join(User).where(User.mitglied == 0)
-    )
-    mitgliedskosten = kaffeeanzahl_mitglieder * Decimal(st.secrets.KAFFEEPREIS_MITGLIED)
-    gastkosten = kaffeeanzahl_gaeste * Decimal(st.secrets.KAFFEEPREIS_GAST)
+                gastkaffees += log.anzahl
 
-offene_rechnungen, summe = offene_rechnungen(conn)
-
-with conn.session as session:
-    users = session.scalars(select(User).where(User.status == "active")).all()
-    df_saldi = pd.DataFrame().from_records(
-        [
+        saldo = user.get_saldo(conn)
+        if saldo > 0:
+            summe_positiv += saldo
+        saldi.append(
             {
                 "Name": user.name,
                 "Vorname": user.vorname,
                 "Mitglied": user.mitglied,
-                "Saldo": user.get_saldo(conn),
+                "Saldo": saldo,
             }
-            for user in users
-        ]
-    )
-summe_positiv = df_saldi[df_saldi["Saldo"] > 0]["Saldo"].sum()
+        )
 
-col1, col2, col3 = st.columns(3)
+    mitgliedskosten = mitgliederkaffees * Decimal(st.secrets.KAFFEEPREIS_MITGLIED)
+    gastkosten = gastkaffees * Decimal(st.secrets.KAFFEEPREIS_GAST)
+
+    st.title("Kontoübersicht")
+
+    col1, col2, col3 = st.columns(3)
 
 with col1:
     st.metric("Einzahlungen", "€ " + str(einzahlungen).replace(".", ","))
@@ -104,15 +131,17 @@ with col1:
         "Kassenstand",
         "€ " + str(einzahlungen + auszahlungen + korrekturen).replace(".", ","),
     )
-    st.metric("offene Rechnungen", "€ " + str(summe).replace(".", ","))
+    st.metric(
+        "offene Rechnungen", "€ " + str(offene_rechnungen_summe).replace(".", ",")
+    )
 
     st.metric("Einkäufe", "€ " + str(einkaeufe).replace(".", ","))
 
 with col2:
 
-    st.metric("Kaffeeanzahl Mitglieder", str(kaffeeanzahl_mitglieder))
-    st.metric("Kaffeeanzahl Gäste", str(kaffeeanzahl_gaeste))
-    st.metric("Kaffeeanzahl gesamt", str(kaffeeanzahl_mitglieder + kaffeeanzahl_gaeste))
+    st.metric("Kaffeeanzahl Mitglieder", str(mitgliederkaffees))
+    st.metric("Kaffeeanzahl Gäste", str(gastkaffees))
+    st.metric("Kaffeeanzahl gesamt", str(mitgliederkaffees + gastkaffees))
     st.metric("Summe der Guthaben", "€ " + str(summe_positiv).replace(".", ","))
     st.metric(
         "Überschuss",
@@ -127,16 +156,15 @@ with col3:
         "€ " + str(mitgliedskosten + gastkosten).replace(".", ","),
     )
 
-# st.dataframe(
-#     df_zahlungen,
-#     column_config={
-#         "Betrag": st.column_config.NumberColumn(format="€ %g"),
-#         "Datum": st.column_config.DatetimeColumn(format="DD.MM.YY"),
-#     },
-# )
+    # st.write(f"Einzahlungen: {einzahlungen}")
+    # st.write(f"Einkäufe: {einkaeufe}")
+    # st.write(f"Auszahlungen: {auszahlungen}")
+    # st.write(f"Korrekturen: {korrekturen}")
+    # st.write(f"Offene Rechnungen: {offene_rechnungen_summe}")
+    # st.write(f"Mitgliederkaffees: {mitgliederkaffees}")
+    # st.write(f"Gastkaffees: {gastkaffees}")
 
 st.subheader("offene Rechnungen")
-
 st.dataframe(
     offene_rechnungen,
     column_config={
@@ -145,11 +173,9 @@ st.dataframe(
     },
 )
 
-
 st.subheader("Saldi der Nutzenden")
-
 st.dataframe(
-    df_saldi,
+    saldi,
     column_config={"Saldo": st.column_config.NumberColumn(format="€ %g")},
 )
 
