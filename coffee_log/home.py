@@ -69,12 +69,16 @@ with st.form(key="log_coffee", clear_on_submit=True):
         options=list(range(1, 6)),
         key="anzahl_slider",
     )
-    code = st.text_input(
-        "Geben Sie Ihr Kennwort ein.", key="code_input", type="password"
-    )
-    submit = st.form_submit_button(
-        "Kaffee eintragen", type="primary", on_click=login, args=(conn,)
-    )
+    if "user" in st.session_state:
+        submit = st.form_submit_button(
+            "Kaffee eintragen", type="primary")
+    else:
+        code = st.text_input(
+            "Geben Sie Ihr Kennwort ein.", key="code_input", type="password"
+        )
+        submit = st.form_submit_button(
+            "Kaffee eintragen", type="primary", on_click=login, args=(conn,)
+        )
 
 if submit:
     log_coffee(conn)
