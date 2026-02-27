@@ -140,11 +140,7 @@ login_pages = [
 ]
 passwort_reset_page = st.Page(set_new_password, title="Passwort zurücksetzen")
 
-
-# st.write(st.session_state)
 st.title("☕ LSB Kaffeeabrechnung")
-# st.write("dev")
-# st.write(st.secrets.connections.coffee_counter.database)
 
 page_dict = {}
 
@@ -152,16 +148,11 @@ if "token" in st.query_params:
     pg = st.navigation([st.Page(tokens)])
 
 else:
-    if "user" not in st.session_state:
-        page_dict["Menü"] = standard_pages
-
+    page_dict["Menü"] = standard_pages
     if "user" in st.session_state:
-        page_dict["Menü"] = standard_pages
-        if "user" in st.session_state and st.session_state.user.admin == 1:
+        if st.session_state.user.admin == 1:
             page_dict["Admin"] = admin_pages
         page_dict["Persönlicher Bereich"] = login_pages
-
-if len(page_dict) > 0:
-    pg = st.navigation(page_dict)
+    pg = st.navigation(page_dict, position="sidebar", expanded=False)
 
 pg.run()

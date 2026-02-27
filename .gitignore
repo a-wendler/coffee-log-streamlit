@@ -8,3 +8,4 @@ secrets_old.toml
 secrets_live.toml
 secrets_test.toml
 alembic.ini
+poetry.lock

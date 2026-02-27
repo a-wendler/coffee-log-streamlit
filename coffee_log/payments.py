@@ -6,6 +6,8 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import select
 from loguru import logger
+from datetime import date
+import calendar
 
 from database.models import User, Payment
 
@@ -48,6 +50,10 @@ def edit_payment_data():
 def sync_data_editor():
     st.session_state.data_editor = edited_df
 
+def reset_form(keys):
+    for k in keys:
+        st.session_state.pop(k, None)
+    st.rerun()
 
 # Streamlit app layout
 # menu_with_redirect()
@@ -96,9 +102,70 @@ with conn.session as session:
         ]
     )
 
+df_filter = df.copy()
+
+with st.expander('Tabelle filtern'):
+    with st.form("data_editor_filter"):
+        left, right = st.columns(2)
+        today = date.today()
+
+        filter_einzahler = left.multiselect(
+            "Einzahler",
+            df["Einzahler"].sort_values().unique().tolist(),
+            key="f_einzahler"
+        )
+
+        filter_typ = right.multiselect(
+            "Typ",
+            ["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"],
+            key="f_typ"
+        )
+
+        # default to current month range
+        start_default = today.replace(day=1)
+        end_default = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+        filter_datum = left.date_input(
+            "Datum",
+            value=(start_default, end_default),
+            format="DD/MM/YYYY",
+            key="f_datum"
+        )
+
+        submitted = left.form_submit_button("Filtern")
+        reset = left.form_submit_button("Reset", on_click=reset_form, kwargs={"keys": ["f_einzahler","f_typ","f_datum"]}, type='secondary')
+
+        if submitted:
+            # Ensure datetime dtype for comparison
+            if not pd.api.types.is_datetime64_any_dtype(df["Datum"]):
+                df["Datum"] = pd.to_datetime(df["Datum"], format='mixed').dt.date
+
+            mask = pd.Series(True, index=df.index)
+
+            # Only apply if selections exist
+            if filter_einzahler:
+                mask &= df["Einzahler"].isin(filter_einzahler)
+
+            if filter_typ:
+                mask &= df["Typ"].isin(filter_typ)
+
+            # Date range: st.date_input can return a date or a tuple
+            if isinstance(filter_datum, tuple) and len(filter_datum) == 2:
+                start_date, end_date = filter_datum
+                # compare on .dt.date if column is datetime64; otherwise compare dates directly
+                if pd.api.types.is_datetime64_any_dtype(df["Datum"]):
+                    mask &= (df["Datum"].dt.date >= start_date) & (df["Datum"].dt.date <= end_date)
+                else:
+                    mask &= (df["Datum"] >= start_date) & (df["Datum"] <= end_date)
+
+            df_filter = df.loc[mask]
+
+        if reset:
+            df_filter = df.copy()
+
 with st.form(key="edit_payment_data"):
     edited_df = st.data_editor(
-        df,
+        df_filter,
         key="data_editor",
         disabled=["id", "name"],
     )
