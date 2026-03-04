@@ -1,32 +1,18 @@
+"""Debug page for balance/invoice verification - uses API."""
+
 import streamlit as st
 
-from database.models import User, Payment
-from sqlalchemy import select
+from api_client import get
 
-conn = st.connection("coffee_counter", type="sql")
+st.subheader("Guthaben Test (Debug)")
 
-namensliste = ["Reichheim", "Friesel", "Wendler"]
-for name in namensliste:
-    st.subheader(f"Abrechnung {name}")
-    with conn.session as session:
-        nutzer = session.scalar(select(User).where(User.name == name))
-        st.write("Saldo: ", nutzer.get_saldo(conn))
-        st.write("Invoices:")
-        invoices = nutzer.get_invoices(conn)
-        invoice_summe = 0
-        for invoice in invoices:
-            invoice_summe += invoice.gesamtbetrag
-            st.write(invoice.monat, invoice.gesamtbetrag, "Kaffees: ", invoice.kaffee_anzahl, "bezahlt ", invoice.bezahlt)
-
-        st.write("Payments:")
-        payments = session.scalars(
-                select(Payment).where(
-                    Payment.user_id == nutzer.id,
-                )
-            ).all()
-        gesamtbetrag = 0
-        for payment in payments:
-            gesamtbetrag += payment.betrag
-            st.write(payment.betrag)
-        st.write("Gesamtbetrag Payments: ", gesamtbetrag)
-        
+try:
+    data = get("/account/overview")
+    saldi = data.get("saldi", [])
+    offene = data.get("offene_rechnungen", [])
+    st.write("Saldi der Nutzenden:")
+    st.dataframe(saldi, column_config={"Saldo": st.column_config.NumberColumn(format="€ %g")})
+    st.write("Offene Rechnungen:")
+    st.dataframe(offene)
+except Exception as e:
+    st.error(f"Fehler: {e}")

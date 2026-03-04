@@ -1,41 +1,27 @@
-from hashlib import sha256
+"""Login logic - calls API."""
 
 import streamlit as st
 from loguru import logger
 
-from database.models import User
+from api_client import post
 
 
-def login(conn):
-    if "code_input" in st.session_state:
-        if len(st.session_state.code_input) > 0:
-            pwd = st.session_state.code_input
-    if "code_login" in st.session_state:
-        if len(st.session_state.code_login) > 0:
-            pwd = st.session_state.code_login
-    with conn.session as session:
-        try:
-            user = (
-                session.query(User)
-                .filter(
-                    User.code == sha256(pwd.encode("utf-8")).hexdigest(),
-                    User.status == "active",
-                )
-                .first()
-            )
-            
-            # st.session_state.current_user["name"] = user.name
-            # st.session_state.current_user["vorname"] = user.vorname
-            # st.session_state.current_user["id"] = user.id
-            # if user.admin:
-            #     st.session_state.current_user["role"] = "admin"
-            # else:
-            #     st.session_state.current_user["role"] = "user"
-            if isinstance(user, User):
-                st.session_state.user = user
-                logger.success(f"Login: {user.name}")
-        except Exception as e:
-            logger.error(f"Login error: {e}")
-            st.error("Fehler beim Login!")
-    if "user" not in st.session_state:
-        st.error("Ungültiges Kennwort oder Nutzerkonto nicht aktiviert!")
+def login(code: str) -> bool:
+    """Login with password. On success: sets st.session_state.user and access_token. Returns True if successful."""
+    if not code or len(code) == 0:
+        return False
+    try:
+        resp = post("/auth/login", json={"code": code})
+        st.session_state.access_token = resp["access_token"]
+        st.session_state.user = resp["user"]
+        logger.success(f"Login: {resp['user']['name']}")
+        return True
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        st.error("Fehler beim Login!")
+        return False
+
+
+def is_logged_in() -> bool:
+    """Check if user is logged in."""
+    return "user" in st.session_state and st.session_state.user is not None

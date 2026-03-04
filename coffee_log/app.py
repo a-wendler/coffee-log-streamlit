@@ -1,14 +1,14 @@
-from hashlib import sha256
-
 import streamlit as st
-from sqlalchemy import select
 from loguru import logger
 
-from database.models import User
+from api_client import get, post
 
 
 def logout():
-    del st.session_state.user
+    if "user" in st.session_state:
+        del st.session_state.user
+    if "access_token" in st.session_state:
+        del st.session_state.access_token
     st.rerun()
 
 
@@ -17,92 +17,54 @@ def clear_params():
 
 
 def tokens():
-    if "token" in st.query_params:
-        if st.query_params.token.startswith("reset_"):
-            set_new_password()
-        elif st.query_params.token.startswith("activate_"):
-            activate()
-        else:
-            st.error("Ungültiger Link!")
-            back = st.button("Zurück zur Startseite", on_click=clear_params)
-            if back:
-                st.query_params.clear()
+    if "token" not in st.query_params:
+        return
+    token = st.query_params.token
+    if token.startswith("reset_"):
+        set_new_password()
+    elif token.startswith("activate_"):
+        activate()
+    else:
+        st.error("Ungültiger Link!")
+        back = st.button("Zurück zur Startseite", on_click=clear_params)
+        if back:
+            st.query_params.clear()
 
 
 def activate():
-    """Check if token is valid and activate user."""
-    with conn.session as session:
-        try:
-            user = session.scalar(
-                select(User).where(User.token == st.query_params.token)
-            )
-            if user:
-                user.status = "active"
-                user.token = None
-                session.commit()
-                st.success("Ihr Konto wurde aktiviert!")
-            else:
-                st.error("Ungültiger Link!")
-                back = st.button("Zurück zur Startseite", on_click=clear_params)
-                if back:
-                    st.query_params.clear()
-        except Exception as e:
-            session.rollback()
-            st.error(
-                "Fehler beim Aktivieren des Accounts. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
-            )
-            logger.error(f"Fehler beim Aktivieren des Accounts: {e}")
-            back = st.button("Zurück zur Startseite", on_click=clear_params)
-            if back:
-                st.query_params.clear()
+    """Activate user account via API."""
+    token = st.query_params.token
+    try:
+        get("/auth/activate", params={"token": token})
+        st.success("Ihr Konto wurde aktiviert!")
+    except Exception as e:
+        st.error("Ungültiger Link!")
+        logger.error(f"Fehler beim Aktivieren des Accounts: {e}")
+    back = st.button("Zurück zur Startseite", on_click=clear_params)
+    if back:
+        st.query_params.clear()
 
 
 def set_new_password():
-    """Check if reset_key is valid and ask user for new password."""
-    with conn.session as session:
-        try:
-            user = session.scalar(
-                select(User).where(
-                    User.token == st.query_params.token, User.status == "active"
+    """Set new password via reset token."""
+    token = st.query_params.token
+    new_password = st.text_input("Neues Kennwort", type="password")
+    if st.button("Neues Kennwort speichern"):
+        if not new_password:
+            st.error("Bitte geben Sie ein Kennwort ein.")
+        else:
+            try:
+                post("/auth/set-password", json={"token": token, "new_password": new_password})
+                st.success("Kennwort wurde geändert!")
+                logger.success("Passwort erfolgreich geändert.")
+            except Exception as e:
+                st.error(
+                    "Fehler beim Zurücksetzen des Passworts. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
                 )
-            )
-            # st.write(user)
-            if user:
-                new_password = st.text_input("Neues Kennwort", type="password")
-                if st.button("Neues Kennwort speichern"):
-                    user.code = sha256(new_password.encode("utf-8")).hexdigest()
-                    user.token = None
-                    session.commit()
-
-                    st.write("Kennwort wurde geändert!")
-                    logger.success(f"Passwort für User {user.id} erfolgreich geändert.")
-                    back = st.button("Zurück zur Startseite", on_click=clear_params)
-                    if back:
-                        st.query_params.clear()
-
-            else:
-                st.error("Ungültiger Link!")
-                back = st.button("Zurück zur Startseite", on_click=clear_params)
-                if back:
-                    st.query_params.clear()
-        except Exception as e:
-            session.rollback()
-            st.error(
-                "Fehler beim Zurücksetzen des Passworts. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
-            )
-            logger.error(f"Fehler beim Zurücksetzen des Passworts: {e}")
-            back = st.button("Zurück zur Startseite", on_click=clear_params)
-            if back:
-                st.query_params.clear()
-
-
-# Streamlit app layout
-
-# Initialize the database
-conn = st.connection("coffee_counter", type="sql")
-
-# add logfile to logger
-# logger.add("logs.log")
+                logger.error(f"Fehler beim Zurücksetzen des Passworts: {e}")
+    back = st.button("Zurück zur Startseite", on_click=clear_params)
+    if back:
+        st.query_params.clear()
 
 
 # Seiten ohne Login
@@ -129,7 +91,8 @@ konto = st.Page("account.py", title="Kontostand", icon=":material/account_balanc
 mietzahlungen = st.Page(
     "mietzahlungen.py", title="Mietzahlungen", icon=":material/attach_money:"
 )
-if "user" in st.session_state:
+
+if "user" in st.session_state and st.session_state.user:
     standard_pages = [home, register]
 else:
     standard_pages = [home, register, login_page]
@@ -138,7 +101,6 @@ login_pages = [
     my_coffee,
     logout_page,
 ]
-passwort_reset_page = st.Page(set_new_password, title="Passwort zurücksetzen")
 
 st.title("☕ LSB Kaffeeabrechnung")
 
@@ -146,11 +108,10 @@ page_dict = {}
 
 if "token" in st.query_params:
     pg = st.navigation([st.Page(tokens)])
-
 else:
     page_dict["Menü"] = standard_pages
-    if "user" in st.session_state:
-        if st.session_state.user.admin == 1:
+    if "user" in st.session_state and st.session_state.user:
+        if st.session_state.user.get("admin") == 1:
             page_dict["Admin"] = admin_pages
         page_dict["Persönlicher Bereich"] = login_pages
     pg = st.navigation(page_dict, position="sidebar", expanded=False)
