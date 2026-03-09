@@ -1,0 +1,21 @@
+# Docker Compose for the FastAPI backend (API server that api_client connects to)
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-mysql+pymysql://user:pass@host.docker.internal:3306/coffee}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-1440}
+      - KAFFEE_PREIS_MITGLIED=${KAFFEE_PREIS_MITGLIED:-0.25}
+      - KAFFEE_PREIS_GAST=${KAFFEE_PREIS_GAST:-1.0}
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
