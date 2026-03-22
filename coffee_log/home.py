@@ -48,15 +48,18 @@ with st.form(key="log_coffee", clear_on_submit=True):
 if submit:
     if "user" in st.session_state:
         if log_coffee(st.session_state.anzahl_slider):
-            st.success("Ihr Kaffee wurde eingetragen!")
+            st.session_state["coffee_logged"] = True
             st.rerun()
     else:
         if "code_input" in st.session_state and login(st.session_state.code_input):
             if log_coffee(st.session_state.anzahl_slider):
-                st.success("Ihr Kaffee wurde eingetragen!")
+                st.session_state["coffee_logged"] = True
             st.rerun()
         else:
             st.error("Ungültiges Kennwort oder Nutzerkonto nicht aktiviert!")
+
+if st.session_state.pop("coffee_logged", False):
+    st.success("Ihr Kaffee wurde eingetragen!")
 
 with st.expander("Kennwort vergessen?"):
     st.subheader("Kennwort zurücksetzen")
