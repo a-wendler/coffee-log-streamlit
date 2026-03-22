@@ -4,6 +4,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, extract
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from api.auth import get_current_user_id, require_admin
@@ -46,7 +47,7 @@ def list_payments(
         else:
             require_admin(_user_to_dict(user))
             payments = session.scalars(
-                select(Payment).options(Payment.user).order_by(Payment.ts.desc())
+                select(Payment).options(selectinload(Payment.user)).order_by(Payment.ts.desc())
             ).all()
         return [
             {
