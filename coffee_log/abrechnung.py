@@ -239,7 +239,9 @@ if datum:
                 selectinload(Invoice.payments),
             )
             .where(Invoice.monat >= monatsstart, Invoice.monat < monatsende)
-            .order_by(User.name)
+            # offene Rechnungen zuerst: "bezahlt IS NOT NULL" ist 0 für offene,
+            # 1 für bezahlte; innerhalb der Gruppen nach Nachname.
+            .order_by(Invoice.bezahlt.isnot(None), User.name)
         ).all()
 
         # wenn für den gewählten Monat noch keine Rechnungen gebucht wurden
