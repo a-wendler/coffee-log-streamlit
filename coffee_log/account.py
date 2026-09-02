@@ -33,6 +33,10 @@ mitgliederkaffees = sum(k.kaffees for k in konten if k.mitglied)
 gastkaffees = sum(k.kaffees for k in konten if not k.mitglied)
 
 summe_positiv = sum((k.saldo for k in konten if k.saldo > 0), NULL_BETRAG)
+
+# Nur freigeschaltete Konten. Die Kennzahlen oben bleiben bewusst über alle
+# Konten gerechnet: eingezahltes Geld und getrunkener Kaffee ändern sich nicht
+# dadurch, dass ein Konto noch nicht aktiviert ist.
 saldi = [
     {
         "Name": k.name,
@@ -41,6 +45,7 @@ saldi = [
         "Saldo": k.saldo,
     }
     for k in konten
+    if k.aktiv
 ]
 
 mitgliedskosten = mitgliederkaffees * Decimal(st.secrets.KAFFEEPREIS_MITGLIED)

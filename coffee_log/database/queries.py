@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from sqlalchemy import case, func, select
 
@@ -29,6 +29,7 @@ class UserKonto:
     name: str
     vorname: str
     mitglied: bool
+    status: Optional[str]
     einzahlungen: Decimal
     einkaeufe: Decimal
     auszahlungen: Decimal
@@ -41,6 +42,11 @@ class UserKonto:
     def saldo(self) -> Decimal:
         """Guthaben (positiv) bzw. offener Betrag (negativ)."""
         return self.zahlungen_summe - self.rechnungen_summe
+
+    @property
+    def aktiv(self) -> bool:
+        """Konto ist freigeschaltet (nicht 'new' oder deaktiviert)."""
+        return self.status == "active"
 
 
 def _summe(spalte) -> "func.coalesce":
@@ -134,6 +140,7 @@ def get_user_konten(session) -> List[UserKonto]:
             User.name,
             User.vorname,
             User.mitglied,
+            User.status,
             func.coalesce(zahlungen.c.einzahlungen, NULL_BETRAG),
             func.coalesce(zahlungen.c.einkaeufe, NULL_BETRAG),
             func.coalesce(zahlungen.c.auszahlungen, NULL_BETRAG),
@@ -154,13 +161,14 @@ def get_user_konten(session) -> List[UserKonto]:
             name=row[1],
             vorname=row[2],
             mitglied=bool(row[3]),
-            einzahlungen=row[4],
-            einkaeufe=row[5],
-            auszahlungen=row[6],
-            korrekturen=row[7],
-            zahlungen_summe=row[8],
-            rechnungen_summe=row[9],
-            kaffees=int(row[10]),
+            status=row[4],
+            einzahlungen=row[5],
+            einkaeufe=row[6],
+            auszahlungen=row[7],
+            korrekturen=row[8],
+            zahlungen_summe=row[9],
+            rechnungen_summe=row[10],
+            kaffees=int(row[11]),
         )
         for row in session.execute(stmt)
     ]
