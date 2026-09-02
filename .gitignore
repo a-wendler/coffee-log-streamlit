@@ -9,3 +9,4 @@ secrets_live.toml
 secrets_test.toml
 alembic.ini
 poetry.lock
+.DS_Store
