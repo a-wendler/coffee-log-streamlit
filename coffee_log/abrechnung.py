@@ -1,10 +1,11 @@
 import streamlit as st
 from contextlib import contextmanager
-from sqlalchemy.pool import QueuePool
 from loguru import logger
 from sqlalchemy import select, extract, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import contains_eager, selectinload
 from database.models import Log, User, Payment, Invoice
+from database.queries import get_saldi
+from db import get_connection
 from helpers import get_first_days_of_last_six_months
 from decimal import Decimal
 from typing import List, Union
@@ -32,22 +33,7 @@ def quantize_decimal(value: Union[Decimal, int, float, str]) -> Decimal:
     return Decimal(value).quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
 
 
-def create_db_url():
-    # Get database credentials from secrets.toml
-    db_username = st.secrets.connections.coffee_counter["username"]
-    db_password = st.secrets.connections.coffee_counter["password"]
-    db_host = st.secrets.connections.coffee_counter["host"]
-    db_port = st.secrets.connections.coffee_counter["port"]
-    db_name = st.secrets.connections.coffee_counter["database"]
-
-    # Construct database URL
-    db_url = (
-        f"mysql+pymysql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
-    )
-    return db_url
-
-
-def monatsliste(session, datum: datetime = datetime.now()) -> List[Invoice]:
+def monatsliste(datum: datetime, saldi: dict) -> List[Invoice]:
 
     invoices = []
     for user in st.session_state[datum]["users"]:
@@ -62,7 +48,7 @@ def monatsliste(session, datum: datetime = datetime.now()) -> List[Invoice]:
             if user.mitglied
             else kaffee_anzahl * quantize_decimal(st.secrets.KAFFEEPREIS_GAST)
         )
-        saldo = user.get_saldo(conn)
+        saldo = saldi.get(user.id, quantize_decimal("0"))
         bezahlt = None
         if saldo > 0:  # Nutzer hat noch Guthaben
             if saldo - kaffee_preis < 0:  # Nutzer hat nicht genug Guthaben
@@ -121,17 +107,7 @@ def monatsbuchung(datum):
 
 # Main Application
 
-conn = st.connection(
-    "coffee_counter",
-    type="sql",
-    url=create_db_url(),
-    pool_size=5,  # Base number of connections to maintain
-    max_overflow=10,  # Allow up to 10 connections beyond pool_size
-    pool_timeout=30,  # Seconds to wait before timing out
-    pool_recycle=1800,  # Recycle connections after 30 minutes
-    pool_pre_ping=True,  # Verify connection validity before checkout
-    poolclass=QueuePool,
-)
+conn = get_connection()
 
 uebersetzungen = {
     "January": "Januar",
@@ -158,9 +134,15 @@ if datum:
     if datum not in st.session_state:
         st.session_state[datum] = {}
     with get_db_connection() as session:
+        # user und payments werden unten für jede Rechnung gebraucht und deshalb
+        # gleich mitgeladen – sonst löst jede Rechnung zwei Nachladequeries aus.
         invoices = session.scalars(
             select(Invoice)
-            .join(User)
+            .join(Invoice.user)
+            .options(
+                contains_eager(Invoice.user),
+                selectinload(Invoice.payments),
+            )
             .where(
                 extract("month", Invoice.monat) == datum.month,
                 extract("year", Invoice.monat) == datum.year,
@@ -197,6 +179,13 @@ if datum:
                         .order_by(User.name)
                     )
                 ).all()
+
+            # Alle Saldi in einer Query, statt zweimal pro Person einzeln.
+            # no_autoflush, weil weiter unten noch nicht gebuchte Invoice-Objekte
+            # an die User gehängt werden: ein Autoflush würde diese Rechnungen
+            # vorzeitig in die Datenbank schreiben.
+            with session.no_autoflush:
+                saldi = get_saldi(session)
 
             # Gesamtabrechnung
             st.subheader("Gesamtabrechnung")
@@ -240,7 +229,7 @@ if datum:
                             "Betreff": payment.betreff,
                             "Betrag": payment.betrag,
                             "Typ": payment.typ,
-                            "Nutzer": payment.user.name,
+                            "Nutzer": user.name,
                         }
                         for payment in user.payments
                         if payment.typ in ["Einkauf", "Korrektur", "Auszahlung"]
@@ -257,7 +246,7 @@ if datum:
             st.subheader("Einzelabrechnungen")
             with st.spinner("Einzelabrechnungen werden erstellt …"):
                 if "invoices" not in st.session_state[datum]:
-                    monatsliste(session, datum=datum)
+                    monatsliste(datum, saldi)
                 show_liste = []
 
                 table = st.dataframe(
@@ -268,7 +257,9 @@ if datum:
                             "Kaffeeanzahl": abrechnung.kaffee_anzahl,
                             "Kaffeekosten": abrechnung.kaffee_preis,
                             "Einkäufe": abrechnung.payment_betrag,
-                            "Guthaben alt": abrechnung.user.get_saldo(conn),
+                            "Guthaben alt": saldi.get(
+                                abrechnung.user_id, quantize_decimal("0")
+                            ),
                         }
                         for abrechnung in st.session_state[datum]["invoices"]
                     ],
@@ -291,31 +282,16 @@ if datum:
                     bezahlt_icon = "✅"
                 else:
                     bezahlt_icon = "❌"
-                if abrechnung.email_versand:
-                    email_icon = "📧"
-                else:
-                    email_icon = ""
-
-                with st.expander(
-                    label=f"{bezahlt_icon} {email_icon} {abrechnung.user.name}"
-                ):
+                with st.expander(label=f"{bezahlt_icon} {abrechnung.user.name}"):
                     st.write("Zahlbetrag:", abrechnung.gesamtbetrag)
                     st.write("Kaffeeanzahl:", abrechnung.kaffee_anzahl)
                     st.write("Kaffeekosten:", abrechnung.kaffee_preis)
                     st.write("Einkäufe, Auszahlungen etc.:", abrechnung.payment_betrag)
                     st.write("Erstellt:", abrechnung.ts)
-                    # st.write("E-Mailversand:", abrechnung.email_versand)
                     st.write("Bezahlt:", abrechnung.bezahlt)
                     st.write("Zahlungen:")
                     for payment in abrechnung.payments:
                         st.write(payment.betrag, payment.betreff, payment.ts)
-
-                    # st.button(
-                    #     "Rechnung senden",
-                    #     key=f"invoice_{abrechnung.id}",
-                    #     on_click=abrechnung.send_invoice_mail,
-                    #     args=(conn,),
-                    # )
 
                     if not abrechnung.bezahlt:
                         st.button(

@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 from database.models import User
 from sqlalchemy import select
+from db import get_connection
 
 
 def edit_user_data():
@@ -57,7 +58,7 @@ def edit_user_data():
 
 # Streamlit app layout
 # menu_with_redirect()
-conn = st.connection("coffee_counter", type="sql")
+conn = get_connection()
 st.subheader("Nutzer bearbeiten")
 edit_user_data()
 

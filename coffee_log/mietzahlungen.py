@@ -3,8 +3,9 @@ from sqlalchemy import select, extract
 
 from database.models import Mietzahlung, User
 from helpers import get_first_days_of_last_six_months
+from db import get_connection
 
-conn = st.connection("coffee_counter", type="sql")
+conn = get_connection()
 uebersetzungen = {
     "January": "Januar",
     "February": "Februar",

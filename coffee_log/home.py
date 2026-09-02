@@ -9,6 +9,7 @@ from database.models import Log, User
 from login import login
 
 from seiten.mail import send_reset_email
+from db import get_connection
 
 def reset_password(email, conn):
     """Write reset-token to users-table.
@@ -57,7 +58,7 @@ def log_coffee(conn):
         st.error("Ungültiges Kennwort oder Nutzerkonto nicht aktiviert!")
 
 # st.write(st.session_state)
-conn = st.connection("coffee_counter", type="sql")
+conn = get_connection()
 
 # st.header("☕ LSB Kaffeeabrechnung")
 

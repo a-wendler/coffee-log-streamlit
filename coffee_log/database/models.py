@@ -10,7 +10,6 @@ from sqlalchemy import Integer, String, ForeignKey, select, extract, func
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from sqlalchemy.types import DECIMAL
-from seiten.mail import send_email
 
 import streamlit as st
 
@@ -112,26 +111,16 @@ class User(Base):
             return payments
 
     def get_saldo(self, conn) -> Decimal:
+        """Saldo dieser Person.
+
+        Öffnet eine eigene Session. Wer schon eine Session hat, ruft besser
+        ``database.queries.get_saldo(session, user_id)`` direkt auf; wer die
+        Saldi mehrerer Personen braucht, ``get_saldi(session)``.
+        """
+        from database.queries import get_saldo
 
         with conn.session as session:
-            invoice_sum = session.scalar(
-
-                select(func.sum(Invoice.kaffee_preis)).where(
-                    Invoice.user_id == self.id,
-                )
-            )
-            if not invoice_sum:
-                invoice_sum = 0
-
-            payment_sum = session.scalar(
-                select(func.sum(Payment.betrag)).where(
-                    Payment.user_id == self.id
-                )
-            )
-
-            if not payment_sum:
-                payment_sum = 0
-        return payment_sum - invoice_sum
+            return get_saldo(session, self.id)
 
     def get_invoices(self, conn) -> List[Invoice]:
         with conn.session as session:
@@ -196,6 +185,8 @@ class Invoice(Base):
         DECIMAL(8, 2), nullable=True
     )
     monat: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    # Rechnungen werden nicht mehr per E-Mail versandt. Die Spalte bleibt
+    # erhalten, weil sie den Versand alter Rechnungen dokumentiert.
     email_versand: Mapped[Optional[datetime]] = mapped_column(String(64), nullable=True)
     bezahlt: Mapped[Optional[datetime]] = mapped_column(String(64), nullable=True)
     ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
@@ -236,75 +227,6 @@ class Invoice(Base):
             )
             logger.error(f"Rechnung konnte nicht als bezahlt markiert werden: {e}")
 
-    def send_invoice_mail(self, conn):
-        uebersetzungen = {
-            "January": "Januar",
-            "February": "Februar",
-            "March": "März",
-            "April": "April",
-            "May": "Mai",
-            "June": "Juni",
-            "July": "Juli",
-            "August": "August",
-            "September": "September",
-            "October": "Oktober",
-            "November": "November",
-            "December": "Dezember",
-        }
-        monat = datetime.strptime(self.monat, "%Y-%m-%d %H:%M:%S")
-        monat = uebersetzungen[monat.strftime("%B")] + " " + monat.strftime("%Y")
-        subject = f"LSB Kaffeeabrechnung {monat}"
-        text = f"""
-        Guten Tag {self.user.vorname} {self.user.name},
-Ihre Kaffeeabrechnung für {monat}:
-
-Getrunkene Tassen Kaffee: {self.kaffee_anzahl}
-Preis für Kaffee: {self.kaffee_preis} €"""
-        if self.payment_betrag:
-            text += f"""         
-Einkäufe diesen Monat: {self.payment_betrag} €
-"""
-        with conn.session as session:
-            if self.gesamtbetrag < self.kaffee_preis:
-                if self.gesamtbetrag == 0:
-                    text += f"""
-Ihr bestehendes Guthaben wurde mit den Kosten für diesen Monat verrechnet.
-
-Sie müssen nichts überweisen.
-
-Ihr aktuelles Guthaben beträgt: {self.user.get_saldo(conn)} €
-"""
-                if self.gesamtbetrag > 0:
-                    text += f"""
-Ihr bestehendes Guthaben wurde mit den Kosten für diesen Monat verrechnet.
-
-Sie müssen nur den Restbetrag von {self.gesamtbetrag} € überweisen.
-
-{st.secrets.ZAHLUNGSOPTIONEN}
-"""
-            if self.gesamtbetrag == self.kaffee_preis:
-                text += f"""
-=========================================================
-Gesamtbetrag: {self.gesamtbetrag} €
-
-{st.secrets.ZAHLUNGSOPTIONEN}
-"""
-            try:
-                send_email(self.user.email, text, subject)
-                self.email_versand = datetime.now()
-                session.add(self)
-                session.commit()
-                logger.success(f"Rechnung für {monat} an {self.user.email} versandt.")
-                return st.success("Rechnung erfolgreich versandt!")
-            except Exception as e:
-                session.rollback()
-                st.error(
-                    "Die Rechnung konnte nicht per Email versandt werden. Es ist ein Fehler aufgetreten."
-                )
-                logger.error(
-                    f"Rechnung für {monat} an {self.user.email} konnte nicht per Email versandt werden: {e}"
-                )
-                return e
 
 class Mietzahlung(Base):
     """Model für erfasste Mietzahlungen"""

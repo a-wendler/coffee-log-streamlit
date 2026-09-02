@@ -2,8 +2,9 @@ import streamlit as st
 
 from database.models import User, Payment
 from sqlalchemy import select
+from db import get_connection
 
-conn = st.connection("coffee_counter", type="sql")
+conn = get_connection()
 
 namensliste = ["Reichheim", "Friesel", "Wendler"]
 for name in namensliste:

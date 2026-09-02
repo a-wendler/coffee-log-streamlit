@@ -5,6 +5,7 @@ import random
 import streamlit as st
 
 from database.models import User, Log
+from db import get_connection
 
 
 def test_data_user(conn):
@@ -83,7 +84,7 @@ def test_data_log(conn):
 
 st.write("hello")
 
-conn = st.connection("coffee_counter", type="sql")
+conn = get_connection()
 if 'database' in st.secrets.connections.coffee_counter:
     if st.secrets.connections.coffee_counter['database'] == 'coffee':
         pass

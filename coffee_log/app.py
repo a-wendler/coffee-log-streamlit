@@ -5,6 +5,7 @@ from sqlalchemy import select
 from loguru import logger
 
 from database.models import User
+from db import get_connection
 
 
 def logout():
@@ -99,7 +100,7 @@ def set_new_password():
 # Streamlit app layout
 
 # Initialize the database
-conn = st.connection("coffee_counter", type="sql")
+conn = get_connection()
 
 # add logfile to logger
 # logger.add("logs.log")

@@ -10,6 +10,7 @@ from datetime import date
 import calendar
 
 from database.models import User, Payment
+from db import get_connection
 
 def new_payment():
     """Add new payment."""
@@ -58,23 +59,25 @@ def reset_form(keys):
 # Streamlit app layout
 # menu_with_redirect()
 # st.write(st.session_state)
-conn = st.connection("coffee_counter", type="sql")
+conn = get_connection()
 st.subheader("Zahlung hinzufügen")
+
+# Namen der Mitglieder einmal laden. Vorher lief die format_func der selectbox
+# pro Eintrag der Auswahlliste in eine eigene Query.
+with conn.session as session:
+    mitglieder = dict(
+        session.execute(
+            select(User.id, User.name).filter(User.mitglied == 1)
+        ).all()
+    )
+
 with st.form(key="payment_form", clear_on_submit=True):
-    with conn.session as session:
-        user = st.selectbox(
-            "Nutzer",
-            [
-                user[0].id
-                for user in session.execute(
-                    select(User).filter(User.mitglied == 1)
-                ).all()
-            ],
-            format_func=lambda x: session.execute(select(User).filter(User.id == x))
-            .first()[0]
-            .name,
-            key="user_selection",
-        )
+    user = st.selectbox(
+        "Nutzer",
+        list(mitglieder),
+        format_func=lambda user_id: mitglieder[user_id],
+        key="user_selection",
+    )
     betreff = st.text_input("Betreff", key="betreff")
     typ = st.selectbox(
         "Typ",
@@ -86,21 +89,27 @@ with st.form(key="payment_form", clear_on_submit=True):
     submit = st.form_submit_button("Zahlung hinzufügen", on_click=new_payment)
 
 st.subheader("Zahlungen bearbeiten")
+
+# Der Name kommt über einen Join direkt mit. Vorher wurde er über
+# payment.user nachgeladen – eine Query je Zahlung.
 with conn.session as session:
-    payments = session.scalars(select(Payment)).all()
-    df = pd.DataFrame().from_records(
-        [
-            {
-                "ID": payment.id,
-                "Einzahler": payment.user.name,
-                "Betrag": payment.betrag,
-                "Betreff": payment.betreff,
-                "Typ": payment.typ,
-                "Datum": payment.ts,
-            }
-            for payment in payments
-        ]
-    )
+    zahlungen = session.execute(
+        select(
+            Payment.id,
+            User.name,
+            Payment.betrag,
+            Payment.betreff,
+            Payment.typ,
+            Payment.ts,
+        )
+        .join(Payment.user)
+        .order_by(Payment.id)
+    ).all()
+
+df = pd.DataFrame.from_records(
+    zahlungen,
+    columns=["ID", "Einzahler", "Betrag", "Betreff", "Typ", "Datum"],
+)
 
 df_filter = df.copy()
 
