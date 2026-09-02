@@ -13,9 +13,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List
 
-from sqlalchemy import case, extract, func, select
+from sqlalchemy import case, func, select
 
 from database.models import Invoice, Log, Mietzahlung, Payment, User
+from helpers import monatsbereich
 
 NULL_BETRAG = Decimal("0.00")
 
@@ -196,13 +197,10 @@ def get_saldo(session, user_id: int) -> Decimal:
 
 def get_monatslogs(session, user_id: int, datum: datetime) -> List[Log]:
     """Kaffee-Einträge einer Person in einem Monat, neueste zuerst."""
+    start, ende = monatsbereich(datum)
     stmt = (
         select(Log)
-        .where(
-            Log.user_id == user_id,
-            extract("month", Log.ts) == datum.month,
-            extract("year", Log.ts) == datum.year,
-        )
+        .where(Log.user_id == user_id, Log.ts >= start, Log.ts < ende)
         .order_by(Log.ts.desc())
     )
     return list(session.scalars(stmt))
@@ -210,20 +208,20 @@ def get_monatslogs(session, user_id: int, datum: datetime) -> List[Log]:
 
 def get_monatspayments(session, user_id: int, datum: datetime) -> List[Payment]:
     """Zahlungen einer Person in einem Monat."""
+    start, ende = monatsbereich(datum)
     stmt = select(Payment).where(
-        Payment.user_id == user_id,
-        extract("month", Payment.ts) == datum.month,
-        extract("year", Payment.ts) == datum.year,
+        Payment.user_id == user_id, Payment.ts >= start, Payment.ts < ende
     )
     return list(session.scalars(stmt))
 
 
 def hat_mietzahlung(session, user_id: int, datum: datetime) -> bool:
     """Ob die Mietzahlung einer Person für den Monat verbucht ist."""
+    start, ende = monatsbereich(datum)
     stmt = select(Mietzahlung.id).where(
         Mietzahlung.user_id == user_id,
-        extract("month", Mietzahlung.monat) == datum.month,
-        extract("year", Mietzahlung.monat) == datum.year,
+        Mietzahlung.monat >= start,
+        Mietzahlung.monat < ende,
     )
     return session.scalar(stmt) is not None
 

@@ -6,7 +6,7 @@ from decimal import Decimal
 from datetime import datetime
 from loguru import logger
 
-from sqlalchemy import Integer, String, ForeignKey, select, extract, func
+from sqlalchemy import DateTime, Integer, String, ForeignKey, select, func
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from sqlalchemy.types import DECIMAL
@@ -24,7 +24,7 @@ class Log(Base):
     __tablename__ = "coffee_log"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     anzahl: Mapped[int] = mapped_column(Integer, nullable=False)
-    ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="logs")
 
@@ -47,7 +47,7 @@ class Payment(Base):
     betrag: Mapped[Decimal] = mapped_column(DECIMAL(8, 2), nullable=False)
     betreff: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     typ: Mapped[str] = mapped_column(String(64), nullable=False)
-    ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="payments")
     invoice_id: Mapped[Optional[int]] = mapped_column(ForeignKey("invoices.id"))
@@ -77,38 +77,11 @@ class User(Base):
     status: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, default="new"
     )
-    ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     logs: Mapped[List[Log]] = relationship(back_populates="user")
     payments: Mapped[List[Payment]] = relationship(back_populates="user")
     invoices: Mapped[List["Invoice"]] = relationship(back_populates="user")
     mietzahlungen: Mapped[List["Mietzahlung"]] = relationship(back_populates="user")
-
-    def get_anzahl_monatskaffees(self, datum: datetime, conn) -> int:
-        if not isinstance(datum, datetime):
-            raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
-        with conn.session as session:
-            coffee_number_stmt = select(func.sum(Log.anzahl)).where(
-                extract("month", Log.ts) == datum.month,
-                extract("year", Log.ts) == datum.year,
-                Log.user_id == self.id,
-            )
-
-            kaffeemenge = session.scalar(coffee_number_stmt)
-            if kaffeemenge:
-                if kaffeemenge > 0:
-                    return kaffeemenge
-            return 0
-
-    def get_payments(self, datum, conn) -> List[Payment]:
-        with conn.session as session:
-            payments = session.scalars(
-                select(Payment).where(
-                    extract("month", Payment.ts) == datum.month,
-                    extract("year", Payment.ts) == datum.year,
-                    Payment.user_id == self.id,
-                )
-            ).all()
-            return payments
 
     def get_saldo(self, conn) -> Decimal:
         """Saldo dieser Person.
@@ -129,24 +102,6 @@ class User(Base):
             ).all()
             return invoices
         
-    def kaffee_liste(self, conn, datum):
-        if not isinstance(datum, datetime):
-            raise ValueError("Argument 'datum' muss ein datetime-Objekt sein")
-        with conn.session as session:
-            coffee_stmt = (
-                select(Log)
-                .where(
-                    Log.user_id == self.id,
-                    extract("month", Log.ts) == datum.month,
-                    extract("year", Log.ts) == datum.year,
-                )
-                .order_by(Log.ts.desc())
-            )
-            coffee_list = session.scalars(coffee_stmt).all()
-            if not coffee_list:
-                return None
-            return coffee_list
-    
     def mietzahlung_eintragen(self, conn, datum):
         with conn.session as session:
             try:
@@ -160,17 +115,6 @@ class User(Base):
                 logger.error(f"Mietzahlung für {datum} von {self.name} {self.vorname} konnte nicht eingetragen werden: {e}")
                 return st.error("Mietzahlung konnte nicht eingetragen werden.")
     
-    def get_mietzahlung_status(self, conn, datum):
-        with conn.session as session:
-            mietzahlung = session.scalar(select(Mietzahlung).where(
-                extract("month", Mietzahlung.monat) == datum.month,
-                extract("year", Mietzahlung.monat) == datum.year,
-                Mietzahlung.user_id == self.id,
-            ))
-            if mietzahlung:
-                return True
-            return False
-
 
 class Invoice(Base):
     """Model für eine Rechnung"""
@@ -184,12 +128,12 @@ class Invoice(Base):
     payment_betrag: Mapped[Optional[Decimal]] = mapped_column(
         DECIMAL(8, 2), nullable=True
     )
-    monat: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    monat: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     # Rechnungen werden nicht mehr per E-Mail versandt. Die Spalte bleibt
     # erhalten, weil sie den Versand alter Rechnungen dokumentiert.
-    email_versand: Mapped[Optional[datetime]] = mapped_column(String(64), nullable=True)
-    bezahlt: Mapped[Optional[datetime]] = mapped_column(String(64), nullable=True)
-    ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    email_versand: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    bezahlt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="invoices")
     payments: Mapped[List[Payment]] = relationship(back_populates="invoice")
@@ -204,9 +148,7 @@ class Invoice(Base):
             return
         
         try:
-            # format datum to string of month
-            monat = datetime.strptime(self.monat, "%Y-%m-%d %H:%M:%S")
-            monat = monat.strftime("%m-%Y")
+            monat = self.monat.strftime("%m-%Y")
 
             self.bezahlt = datetime.now()
             self.payments.append(
@@ -233,8 +175,8 @@ class Mietzahlung(Base):
     __tablename__ = "mietzahlungen"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    monat: Mapped[datetime] = mapped_column(String(64), nullable=False)
-    ts: Mapped[datetime] = mapped_column(String(64), nullable=False)
+    monat: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     user: Mapped["User"] = relationship(back_populates="mietzahlungen")
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
 

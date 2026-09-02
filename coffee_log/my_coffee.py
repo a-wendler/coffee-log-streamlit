@@ -40,7 +40,7 @@ def widget_kaffee_anzahl(logs):
         st.write("Sie haben in diesem Monat keinen Kaffee eingetragen.")
         return
     df = pd.DataFrame(
-        [{"Datum": log.ts[:10], "Anzahl": log.anzahl} for log in logs]
+        [{"Datum": log.ts.date(), "Anzahl": log.anzahl} for log in logs]
     )
     st.dataframe(
         df.groupby("Datum")["Anzahl"].sum().reset_index(),

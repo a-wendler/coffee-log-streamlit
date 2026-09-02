@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import select
 from loguru import logger
-from datetime import date
+from datetime import date, datetime, time
 from decimal import Decimal, ROUND_HALF_UP
 import calendar
 
@@ -22,7 +22,8 @@ def new_payment():
                 betreff=st.session_state.betreff,
                 typ=st.session_state.typ,
                 betrag=st.session_state.betrag,
-                ts=st.session_state.ts,
+                # st.date_input liefert ein date, die Spalte ist DATETIME
+                ts=datetime.combine(st.session_state.ts, time.min),
             )
             if payment.typ == "Auszahlung":
                 payment.betrag = -payment.betrag
@@ -56,8 +57,8 @@ def feldwert(feld, wert):
     if feld == "betrag":
         return Decimal(str(wert)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if feld == "ts":
-        # ts ist eine Textspalte; Datum ohne Uhrzeit, wie beim Neuanlegen auch.
-        return wert.isoformat() if hasattr(wert, "isoformat") else str(wert)
+        # ts ist eine DATETIME-Spalte; das Datum wird zu Mitternacht gespeichert.
+        return datetime.combine(wert, time.min) if isinstance(wert, date) else wert
     return wert
 
 
@@ -148,10 +149,8 @@ df = pd.DataFrame.from_records(
     zahlungen,
     columns=["ID", "Einzahler", "Betrag", "Betreff", "Typ", "Datum"],
 )
-# ts steht als Text in der Datenbank, in zwei Varianten ("2024-06-21" und
-# "2024-08-05 06:26:57.620538"). Einmal zentral umwandeln, damit Filter und
-# Editor mit echten Datumswerten arbeiten.
-df["Datum"] = pd.to_datetime(df["Datum"], format="mixed").dt.date
+# ts ist eine DATETIME-Spalte; fuer Filter und Editor reicht das Datum.
+df["Datum"] = df["Datum"].map(lambda w: w.date() if w is not None else None)
 
 df_filter = df.copy()
 

@@ -20,7 +20,7 @@ def test_data_user(conn):
                 code=sha256(f"user{i}".encode("utf-8")).hexdigest(),
                 status="active",
                 mitglied=1,
-                ts=datetime.now().isoformat(),
+                ts=datetime.now(),
             )
         )
         # Gäste
@@ -33,7 +33,7 @@ def test_data_user(conn):
                 code=sha256(f"user{i}".encode("utf-8")).hexdigest(),
                 status="active",
                 mitglied=0,
-                ts=datetime.now().isoformat(),
+                ts=datetime.now(),
             )
         )
     user_list.append(
@@ -45,7 +45,7 @@ def test_data_user(conn):
             status="active",
             admin=1,
             mitglied=1,
-            ts=datetime.now().isoformat(),
+            ts=datetime.now(),
         )
     )
 

@@ -1,12 +1,12 @@
 import streamlit as st
 from contextlib import contextmanager
 from loguru import logger
-from sqlalchemy import select, extract, or_
+from sqlalchemy import select, or_
 from sqlalchemy.orm import contains_eager, selectinload
 from database.models import Log, User, Payment, Invoice
 from database.queries import get_saldi
 from db import get_connection
-from helpers import get_first_days_of_last_six_months
+from helpers import get_first_days_of_last_six_months, monatsbereich
 from decimal import Decimal
 from typing import List, Union
 from datetime import datetime
@@ -133,6 +133,7 @@ datum = st.selectbox(
 if datum:
     if datum not in st.session_state:
         st.session_state[datum] = {}
+    monatsstart, monatsende = monatsbereich(datum)
     with get_db_connection() as session:
         # user und payments werden unten für jede Rechnung gebraucht und deshalb
         # gleich mitgeladen – sonst löst jede Rechnung zwei Nachladequeries aus.
@@ -143,10 +144,7 @@ if datum:
                 contains_eager(Invoice.user),
                 selectinload(Invoice.payments),
             )
-            .where(
-                extract("month", Invoice.monat) == datum.month,
-                extract("year", Invoice.monat) == datum.year,
-            )
+            .where(Invoice.monat >= monatsstart, Invoice.monat < monatsende)
             .order_by(User.name)
         ).all()
 
@@ -160,8 +158,8 @@ if datum:
                         .options(
                             selectinload(
                                 User.payments.and_(
-                                    extract("month", Payment.ts) == datum.month,
-                                    extract("year", Payment.ts) == datum.year,
+                                    Payment.ts >= monatsstart,
+                                    Payment.ts < monatsende,
                                     or_(
                                         Payment.typ == "Einkauf",
                                         Payment.typ == "Korrektur",
@@ -171,8 +169,7 @@ if datum:
                             ),
                             selectinload(
                                 User.logs.and_(
-                                    extract("month", Log.ts) == datum.month,
-                                    extract("year", Log.ts) == datum.year,
+                                    Log.ts >= monatsstart, Log.ts < monatsende
                                 )
                             ),
                         )

@@ -1,8 +1,8 @@
 import streamlit as st
-from sqlalchemy import select, extract
+from sqlalchemy import select
 
 from database.models import Mietzahlung, User
-from helpers import get_first_days_of_last_six_months
+from helpers import get_first_days_of_last_six_months, monatsbereich
 from db import get_connection
 
 conn = get_connection()
@@ -29,10 +29,10 @@ datum = st.selectbox(
 
 if datum:
     with conn.session as session:
+        start, ende = monatsbereich(datum)
         mietzahlungen = session.scalars(
             select(Mietzahlung).where(
-                extract("month", Mietzahlung.monat) == datum.month,
-                extract("year", Mietzahlung.monat) == datum.year,
+                Mietzahlung.monat >= start, Mietzahlung.monat < ende
             )
         )
         zahlungsliste = [zahlung.user_id for zahlung in mietzahlungen]

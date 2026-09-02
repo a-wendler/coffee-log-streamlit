@@ -40,7 +40,7 @@ def log_coffee(conn):
             try:
                 log = Log(
                     user=st.session_state.user,
-                    ts=datetime.now().isoformat(),
+                    ts=datetime.now(),
                     anzahl=st.session_state.anzahl_slider,
                 )
                 log.save(session)

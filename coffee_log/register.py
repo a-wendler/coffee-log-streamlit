@@ -23,7 +23,7 @@ def add_user(code, name, vorname, email):
                 name=name,
                 vorname=vorname,
                 email=email,
-                ts=datetime.now().isoformat(),
+                ts=datetime.now(),
                 token=token,
                 status="new",
             )
