@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 from contextlib import contextmanager
 from loguru import logger
@@ -6,7 +7,7 @@ from sqlalchemy.orm import contains_eager, selectinload
 from database.models import Log, User, Payment, Invoice
 from database.queries import get_saldi
 from db import get_connection
-from helpers import get_first_days_of_last_six_months, monatsbereich
+from helpers import euro, get_first_days_of_last_six_months, monatsbereich
 from decimal import Decimal
 from typing import List, Union
 from datetime import datetime
@@ -103,6 +104,99 @@ def monatsbuchung(datum):
             st.error("Fehler bei der Buchung")
             logger.error(f"Fehler bei der Buchung: {e}")
             session.rollback()
+
+
+def _rechnung_aus_klick(schluessel: str):
+    """Ermittelt die angeklickte Rechnungs-ID aus dem Klick in der Tabelle.
+
+    Streamlit legt den Klick als {"row": Zeilennummer, "label": Beschriftung}
+    unter dem angegebenen Schlüssel ab. Der Callback läuft vor dem Seitenablauf,
+    deshalb wird die Zeilenreihenfolge aus dem letzten Aufbau der Tabelle
+    verwendet, die dort in st.session_state hinterlegt wurde.
+    """
+    klick = st.session_state.get(schluessel)
+    if not klick:
+        return None
+    ids = st.session_state.get("rechnungs_ids", [])
+    zeile = klick["row"]
+    if zeile >= len(ids):
+        return None
+    return ids[zeile]
+
+
+def rechnung_bezahlt_markieren():
+    """Verbucht den Zahlungseingang für die angeklickte Rechnung."""
+    rechnungs_id = _rechnung_aus_klick("klick_bezahlt")
+    if rechnungs_id is None:
+        return
+    # Eigene Session: die Session des Seitenaufbaus ist zum Zeitpunkt des
+    # Callbacks längst geschlossen.
+    with conn.session as session:
+        rechnung = session.get(Invoice, rechnungs_id)
+        if rechnung is None:
+            st.error("Die Rechnung existiert nicht mehr.")
+            return
+        rechnung.mark_as_paid(session)
+
+
+def rechnung_details_merken():
+    """Merkt die Rechnung vor; Dialoge lassen sich nicht im Callback öffnen."""
+    rechnungs_id = _rechnung_aus_klick("klick_details")
+    if rechnungs_id is not None:
+        st.session_state["details_rechnung"] = rechnungs_id
+
+
+@st.dialog("Rechnungsdetails")
+def zeige_rechnungsdetails(rechnungs_id: int):
+    """Einzelheiten einer Rechnung inklusive der zugehörigen Zahlungen."""
+    with conn.session as session:
+        rechnung = session.scalar(
+            select(Invoice)
+            .options(selectinload(Invoice.payments), contains_eager(Invoice.user))
+            .join(Invoice.user)
+            .where(Invoice.id == rechnungs_id)
+        )
+        if rechnung is None:
+            st.error("Die Rechnung existiert nicht mehr.")
+            return
+
+        st.write(f"**{rechnung.user.vorname} {rechnung.user.name}**")
+        links, rechts = st.columns(2)
+        links.metric("Zahlbetrag", euro(rechnung.gesamtbetrag))
+        rechts.metric("Kaffeeanzahl", str(rechnung.kaffee_anzahl))
+        links.metric("Kaffeekosten", euro(rechnung.kaffee_preis))
+        rechts.metric("Einkäufe, Auszahlungen etc.", euro(rechnung.payment_betrag or 0))
+
+        st.write("Erstellt:", rechnung.ts.strftime("%d.%m.%Y %H:%M"))
+        st.write(
+            "Bezahlt:",
+            rechnung.bezahlt.strftime("%d.%m.%Y %H:%M") if rechnung.bezahlt else "–",
+        )
+
+        st.subheader("Verbuchte Zahlungen")
+        if rechnung.payments:
+            st.dataframe(
+                [
+                    {
+                        "Datum": zahlung.ts,
+                        "Betrag": zahlung.betrag,
+                        "Betreff": zahlung.betreff,
+                    }
+                    for zahlung in rechnung.payments
+                ],
+                hide_index=True,
+                column_config={
+                    "Datum": st.column_config.DatetimeColumn(format="DD.MM.YYYY"),
+                    "Betrag": st.column_config.NumberColumn(format="€ %.2f"),
+                },
+            )
+        else:
+            st.write("Zu dieser Rechnung wurde noch keine Zahlung verbucht.")
+
+        if rechnung.gesamtbetrag <= 0:
+            st.info(
+                "Keine Zahlung fällig. Die Kaffeekosten wurden mit dem Guthaben verrechnet."
+            )
 
 
 # Main Application
@@ -274,30 +368,63 @@ if datum:
                     confirm_monatsabrechnung()
         # wenn für den gewählten Monat bereits Rechnungen gebucht wurden
         elif len(invoices) > 0:
-            for abrechnung in invoices:
-                if abrechnung.bezahlt:
-                    bezahlt_icon = "✅"
-                else:
-                    bezahlt_icon = "❌"
-                with st.expander(label=f"{bezahlt_icon} {abrechnung.user.name}"):
-                    st.write("Zahlbetrag:", abrechnung.gesamtbetrag)
-                    st.write("Kaffeeanzahl:", abrechnung.kaffee_anzahl)
-                    st.write("Kaffeekosten:", abrechnung.kaffee_preis)
-                    st.write("Einkäufe, Auszahlungen etc.:", abrechnung.payment_betrag)
-                    st.write("Erstellt:", abrechnung.ts)
-                    st.write("Bezahlt:", abrechnung.bezahlt)
-                    st.write("Zahlungen:")
-                    for payment in abrechnung.payments:
-                        st.write(payment.betrag, payment.betreff, payment.ts)
+            st.subheader("Gebuchte Rechnungen")
 
-                    if not abrechnung.bezahlt:
-                        st.button(
-                            "Rechnung als bezahlt markieren",
-                            key=f"paid_{abrechnung.id}",
-                            on_click=abrechnung.mark_as_paid,
-                            args=(session,),
-                        )
-                    if abrechnung.gesamtbetrag <= 0:
-                        st.write(
-                            "Keine Zahlung fällig. Kaffeekosten wurden mit Guthaben verrechnet."
-                        )
+            offen = [r for r in invoices if not r.bezahlt]
+            offener_betrag = sum((r.gesamtbetrag for r in offen), Decimal("0.00"))
+            spalte1, spalte2, spalte3 = st.columns(3)
+            spalte1.metric("Rechnungen", str(len(invoices)))
+            spalte2.metric("davon bezahlt", str(len(invoices) - len(offen)))
+            spalte3.metric("offener Betrag", euro(offener_betrag))
+
+            # Die Zeilenreihenfolge merken: der Klick-Callback bekommt nur eine
+            # Zeilennummer und muss daraus die Rechnung auflösen.
+            # Zeilenreihenfolge merken: der Klick-Callback bekommt nur eine
+            # Zeilennummer und muss daraus die Rechnung auflösen.
+            st.session_state["rechnungs_ids"] = [r.id for r in invoices]
+
+            # Bewusst schmal gehalten: die Tabelle muss in die Seitenbreite
+            # passen, ohne dass die Knöpfe abgeschnitten werden. Kaffeekosten,
+            # Einkäufe und das Bezahldatum stehen im Detail-Dialog.
+            tabelle = pd.DataFrame(
+                [
+                    {
+                        "Status": "✅ bezahlt" if r.bezahlt else "❌ offen",
+                        "Name": r.user.name,
+                        "Kaffees": r.kaffee_anzahl,
+                        "Zahlbetrag": r.gesamtbetrag,
+                        # Leere Zelle = kein Knopf: bezahlte Rechnungen
+                        # bekommen keinen Bezahlt-Knopf mehr.
+                        "buchen": None if r.bezahlt else "buchen",
+                        "details": "Details",
+                    }
+                    for r in invoices
+                ]
+            )
+
+            st.dataframe(
+                tabelle,
+                hide_index=True,
+                column_config={
+                    "Status": st.column_config.TextColumn(width="small"),
+                    "Kaffees": st.column_config.NumberColumn(width="small"),
+                    "Zahlbetrag": st.column_config.NumberColumn(format="€ %.2f"),
+                    "buchen": st.column_config.ButtonColumn(
+                        "Zahlungseingang",
+                        width="medium",
+                        type="primary",
+                        on_click=rechnung_bezahlt_markieren,
+                        key="klick_bezahlt",
+                    ),
+                    "details": st.column_config.ButtonColumn(
+                        "",
+                        width="small",
+                        type="tertiary",
+                        on_click=rechnung_details_merken,
+                        key="klick_details",
+                    ),
+                },
+            )
+
+            if st.session_state.get("details_rechnung"):
+                zeige_rechnungsdetails(st.session_state.pop("details_rechnung"))

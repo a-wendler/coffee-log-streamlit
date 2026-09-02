@@ -6,12 +6,7 @@ import streamlit as st
 
 from database.queries import NULL_BETRAG, get_offene_rechnungen, get_user_konten
 from db import get_connection
-
-
-def euro(betrag) -> str:
-    """Formatiert einen Betrag als € mit deutschem Dezimalkomma."""
-    return "€ " + f"{Decimal(betrag):.2f}".replace(".", ",")
-
+from helpers import euro
 
 conn = get_connection()
 

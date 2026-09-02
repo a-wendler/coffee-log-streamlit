@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 
 def get_first_days_of_last_six_months():
@@ -36,3 +37,8 @@ def monatsbereich(datum):
     else:
         ende = datetime(datum.year, datum.month + 1, 1)
     return start, ende
+
+
+def euro(betrag) -> str:
+    """Formatiert einen Betrag als € mit deutschem Dezimalkomma."""
+    return "€ " + f"{Decimal(betrag):.2f}".replace(".", ",")
