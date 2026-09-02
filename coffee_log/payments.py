@@ -7,6 +7,7 @@ import pandas as pd
 from sqlalchemy import select
 from loguru import logger
 from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 import calendar
 
 from database.models import User, Payment
@@ -35,21 +36,58 @@ def new_payment():
         
 
 
+# Die Tabelle zeigt deutsche Spaltentitel, die Datenbank hat andere Feldnamen.
+# Ohne diese Zuordnung lief setattr(payment, "Betrag", …) ins Leere und jede
+# Änderung wurde stillschweigend verworfen.
+SPALTE_ZU_FELD = {
+    "Betrag": "betrag",
+    "Betreff": "betreff",
+    "Typ": "typ",
+    "Datum": "ts",
+}
+
+
+def feldwert(feld, wert):
+    """Wandelt einen Wert aus der Tabelle in das Format der Datenbank."""
+    if feld == "betreff":
+        return wert or None
+    if wert is None or wert == "":
+        raise ValueError(f"Das Feld „{feld}“ darf nicht leer sein.")
+    if feld == "betrag":
+        return Decimal(str(wert)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if feld == "ts":
+        # ts ist eine Textspalte; Datum ohne Uhrzeit, wie beim Neuanlegen auch.
+        return wert.isoformat() if hasattr(wert, "isoformat") else str(wert)
+    return wert
+
+
 def edit_payment_data():
+    """Speichert die im Editor geänderten Zeilen."""
+    aenderungen = st.session_state.data_editor.get("edited_rows", {})
+    if not aenderungen:
+        st.info("Es gab keine Änderungen zum Speichern.")
+        return
+
     with conn.session as session:
-        for index, row in st.session_state.data_editor["edited_rows"].items():
-            df_index = edited_df.iloc[int(index), 0]
-            payment = session.execute(
-                select(Payment).where(Payment.id == int(df_index))
-            ).scalar_one()
-            for k, v in row.items():
-                setattr(payment, k, v)
+        try:
+            for zeile, felder in aenderungen.items():
+                payment_id = int(edited_df.iloc[int(zeile)]["ID"])
+                payment = session.scalar(
+                    select(Payment).where(Payment.id == payment_id)
+                )
+                if payment is None:
+                    raise ValueError(f"Zahlung {payment_id} existiert nicht mehr.")
+                for spalte, wert in felder.items():
+                    feld = SPALTE_ZU_FELD.get(spalte)
+                    if feld is None:
+                        continue  # ID und Einzahler sind nicht änderbar
+                    setattr(payment, feld, feldwert(feld, wert))
             session.commit()
-        st.success("Änderungen wurden gespeichert!")
-
-
-def sync_data_editor():
-    st.session_state.data_editor = edited_df
+            st.success(f"{len(aenderungen)} Zahlung(en) gespeichert.")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Zahlungen konnten nicht gespeichert werden: {e}")
+            st.error(f"Die Änderungen konnten nicht gespeichert werden: {e}")
 
 def reset_form(keys):
     for k in keys:
@@ -110,6 +148,10 @@ df = pd.DataFrame.from_records(
     zahlungen,
     columns=["ID", "Einzahler", "Betrag", "Betreff", "Typ", "Datum"],
 )
+# ts steht als Text in der Datenbank, in zwei Varianten ("2024-06-21" und
+# "2024-08-05 06:26:57.620538"). Einmal zentral umwandeln, damit Filter und
+# Editor mit echten Datumswerten arbeiten.
+df["Datum"] = pd.to_datetime(df["Datum"], format="mixed").dt.date
 
 df_filter = df.copy()
 
@@ -145,10 +187,6 @@ with st.expander('Tabelle filtern'):
         reset = left.form_submit_button("Reset", on_click=reset_form, kwargs={"keys": ["f_einzahler","f_typ","f_datum"]}, type='secondary')
 
         if submitted:
-            # Ensure datetime dtype for comparison
-            if not pd.api.types.is_datetime64_any_dtype(df["Datum"]):
-                df["Datum"] = pd.to_datetime(df["Datum"], format='mixed').dt.date
-
             mask = pd.Series(True, index=df.index)
 
             # Only apply if selections exist
@@ -158,14 +196,10 @@ with st.expander('Tabelle filtern'):
             if filter_typ:
                 mask &= df["Typ"].isin(filter_typ)
 
-            # Date range: st.date_input can return a date or a tuple
+            # st.date_input liefert je nach Auswahl ein Datum oder ein Tupel
             if isinstance(filter_datum, tuple) and len(filter_datum) == 2:
                 start_date, end_date = filter_datum
-                # compare on .dt.date if column is datetime64; otherwise compare dates directly
-                if pd.api.types.is_datetime64_any_dtype(df["Datum"]):
-                    mask &= (df["Datum"].dt.date >= start_date) & (df["Datum"].dt.date <= end_date)
-                else:
-                    mask &= (df["Datum"] >= start_date) & (df["Datum"] <= end_date)
+                mask &= (df["Datum"] >= start_date) & (df["Datum"] <= end_date)
 
             df_filter = df.loc[mask]
 
@@ -176,6 +210,15 @@ with st.form(key="edit_payment_data"):
     edited_df = st.data_editor(
         df_filter,
         key="data_editor",
-        disabled=["id", "name"],
+        # Vorher standen hier "id" und "name" – Spalten, die es nicht gibt.
+        # Damit waren ID und Einzahler bearbeitbar, ohne dass es Wirkung hatte.
+        disabled=["ID", "Einzahler"],
+        column_config={
+            "Betrag": st.column_config.NumberColumn("Betrag", format="€ %.2f"),
+            "Typ": st.column_config.SelectboxColumn(
+                "Typ", options=["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"]
+            ),
+            "Datum": st.column_config.DateColumn("Datum", format="DD.MM.YYYY"),
+        },
     )
     st.form_submit_button("Änderungen speichern", on_click=edit_payment_data)
