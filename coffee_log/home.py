@@ -96,6 +96,9 @@ with st.expander("Kennwort vergessen?"):
                     f"Ein Link zum Zurücksetzen Ihres Kennworts wurde an {email} gesendet."
                 )
             except Exception as e:
+                logger.error(
+                    f"Passwort-Reset-Mail an {email} konnte nicht versandt werden: {e}"
+                )
                 st.error(f"Beim Senden der E-Mail ist ein Fehler aufgetreten: {e}")
         else:
             st.error("Fehler beim Zurücksetzen des Passwortes!")

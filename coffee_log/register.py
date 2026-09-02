@@ -6,6 +6,7 @@ from datetime import datetime
 import re
 
 import streamlit as st
+from loguru import logger
 
 from database.models import User
 from seiten.mail import send_activation_email
@@ -34,6 +35,9 @@ def add_user(code, name, vorname, email):
             f"Nutzer {name} erfolgreich hinzugefügt! Eine E-Mail wurde an {email} gesendet. Bitte bestätigen Sie Ihre E-Mail-Adresse, indem Sie auf den Link in der E-Mail klicken."
         )
             except Exception as e:
+                logger.error(
+                    f"Aktivierungsmail an {email} konnte nicht versandt werden: {e}"
+                )
                 st.error(f"Beim Senden der Aktivierungsmail ist ein Fehler aufgetreten. Bitte wenden Sie sich an {st.secrets.admins['technik']}: {e}")
     except Exception as e:
         st.error(f"Nutzer konnte nicht registriert werden. Wurde die E-Mailadresse bereits registriert? Versuchen Sie ein anderes Kennwort.")
