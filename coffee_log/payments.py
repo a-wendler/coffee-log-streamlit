@@ -9,6 +9,8 @@ from loguru import logger
 from datetime import date, datetime, time
 from decimal import Decimal, ROUND_HALF_UP
 import calendar
+import hashlib
+import math
 
 from database.models import User, Payment
 from db import get_connection
@@ -62,9 +64,9 @@ def feldwert(feld, wert):
     return wert
 
 
-def edit_payment_data():
+def edit_payment_data(editor_schluessel):
     """Speichert die im Editor geänderten Zeilen."""
-    aenderungen = st.session_state.data_editor.get("edited_rows", {})
+    aenderungen = st.session_state[editor_schluessel].get("edited_rows", {})
     if not aenderungen:
         st.info("Es gab keine Änderungen zum Speichern.")
         return
@@ -142,7 +144,9 @@ with conn.session as session:
             Payment.ts,
         )
         .join(Payment.user)
-        .order_by(Payment.id)
+        # neueste zuerst: die zuletzt erfassten Zahlungen sind die,
+        # die man üblicherweise noch einmal ansehen oder korrigieren will
+        .order_by(Payment.id.desc())
     ).all()
 
 df = pd.DataFrame.from_records(
@@ -205,10 +209,37 @@ with st.expander('Tabelle filtern'):
         if reset:
             df_filter = df.copy()
 
-with st.form(key="edit_payment_data"):
+SEITENGROESSE = 25
+
+# Die Tabelle wird oberhalb der Blätterleiste ausgegeben, obwohl die Seitenzahl
+# vorher feststehen muss.
+tabellen_bereich = st.container()
+
+anzahl_seiten = max(1, math.ceil(len(df_filter) / SEITENGROESSE))
+seite = st.pagination(anzahl_seiten, key="zahlungen_seite")
+von = (seite - 1) * SEITENGROESSE
+seiten_df = df_filter.iloc[von : von + SEITENGROESSE]
+
+if len(df_filter):
+    st.caption(
+        f"Zahlungen {von + 1}–{von + len(seiten_df)} von {len(df_filter)}"
+    )
+else:
+    st.caption("Keine Zahlungen für diese Auswahl.")
+
+# Der Schlüssel des Editors hängt an den angezeigten Zeilen. Beim Blättern oder
+# Filtern entsteht dadurch ein neuer Editor mit leerem Zustand -- sonst könnten
+# die gemerkten Zeilennummern einer anderen Seite zugeordnet und damit die
+# falsche Zahlung geändert werden.
+editor_schluessel = "data_editor_" + hashlib.md5(
+    ",".join(str(i) for i in seiten_df["ID"]).encode()
+).hexdigest()[:10]
+
+with tabellen_bereich, st.form(key="edit_payment_data"):
     edited_df = st.data_editor(
-        df_filter,
-        key="data_editor",
+        seiten_df,
+        key=editor_schluessel,
+        hide_index=True,
         # Vorher standen hier "id" und "name" – Spalten, die es nicht gibt.
         # Damit waren ID und Einzahler bearbeitbar, ohne dass es Wirkung hatte.
         disabled=["ID", "Einzahler"],
@@ -223,4 +254,8 @@ with st.form(key="edit_payment_data"):
             "Datum": st.column_config.DateColumn("Datum", format="DD.MM.YYYY"),
         },
     )
-    st.form_submit_button("Änderungen speichern", on_click=edit_payment_data)
+    st.form_submit_button(
+        "Änderungen speichern",
+        on_click=edit_payment_data,
+        args=(editor_schluessel,),
+    )
