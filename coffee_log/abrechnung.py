@@ -176,18 +176,20 @@ def zeige_rechnungsdetails(rechnungs_id: int):
         st.subheader("Verbuchte Zahlungen")
         if rechnung.payments:
             st.dataframe(
-                [
-                    {
-                        "Datum": zahlung.ts,
-                        "Betrag": zahlung.betrag,
-                        "Betreff": zahlung.betreff,
-                    }
-                    for zahlung in rechnung.payments
-                ],
+                pd.DataFrame(
+                    [
+                        {
+                            "Datum": zahlung.ts,
+                            "Betrag": zahlung.betrag,
+                            "Betreff": zahlung.betreff,
+                        }
+                        for zahlung in rechnung.payments
+                    ],
+                    columns=["Datum", "Betrag", "Betreff"],
+                ).style.format({"Betrag": euro}, na_rep=""),
                 hide_index=True,
                 column_config={
                     "Datum": st.column_config.DatetimeColumn(format="DD.MM.YYYY"),
-                    "Betrag": st.column_config.NumberColumn(format="€ %.2f"),
                 },
             )
         else:
@@ -330,9 +332,12 @@ if datum:
                 )
 
             st.dataframe(
-                payment_list,
+                pd.DataFrame(
+                    payment_list,
+                    columns=["Datum", "Betreff", "Betrag", "Typ", "Nutzer"],
+                ).style.format({"Betrag": euro}, na_rep=""),
+                hide_index=True,
                 column_config={
-                    "Betrag": st.column_config.NumberColumn(format="€ %.2f"),
                     "Datum": st.column_config.DatetimeColumn(format="DD.MM.YYYY"),
                 },
             )
@@ -342,26 +347,39 @@ if datum:
                     monatsliste(datum, saldi)
                 show_liste = []
 
-                table = st.dataframe(
-                    [
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Name": abrechnung.user.name,
+                                "Zahlbetrag": quantize_decimal(abrechnung.gesamtbetrag),
+                                "Kaffeeanzahl": abrechnung.kaffee_anzahl,
+                                "Kaffeekosten": abrechnung.kaffee_preis,
+                                "Einkäufe": abrechnung.payment_betrag,
+                                "Guthaben alt": saldi.get(
+                                    abrechnung.user_id, quantize_decimal("0")
+                                ),
+                            }
+                            for abrechnung in st.session_state[datum]["invoices"]
+                        ],
+                        columns=[
+                            "Name",
+                            "Zahlbetrag",
+                            "Kaffeeanzahl",
+                            "Kaffeekosten",
+                            "Einkäufe",
+                            "Guthaben alt",
+                        ],
+                    ).style.format(
                         {
-                            "Name": abrechnung.user.name,
-                            "Zahlbetrag": quantize_decimal(abrechnung.gesamtbetrag),
-                            "Kaffeeanzahl": abrechnung.kaffee_anzahl,
-                            "Kaffeekosten": abrechnung.kaffee_preis,
-                            "Einkäufe": abrechnung.payment_betrag,
-                            "Guthaben alt": saldi.get(
-                                abrechnung.user_id, quantize_decimal("0")
-                            ),
-                        }
-                        for abrechnung in st.session_state[datum]["invoices"]
-                    ],
-                    column_config={
-                        "Zahlbetrag": st.column_config.NumberColumn(format="€ %g"),
-                        "Kaffeekosten": st.column_config.NumberColumn(format="€ %g"),
-                        "Einkäufe": st.column_config.NumberColumn(format="€ %g"),
-                        "Guthaben alt": st.column_config.NumberColumn(format="€ %g"),
-                    },
+                            "Zahlbetrag": euro,
+                            "Kaffeekosten": euro,
+                            "Einkäufe": euro,
+                            "Guthaben alt": euro,
+                        },
+                        na_rep="",
+                    ),
+                    hide_index=True,
                 )
                 monatsabrechnung = st.button(
                     f"Monatsabrechnung {uebersetzungen[datum.strftime("%B")]} erstellen"
@@ -405,12 +423,11 @@ if datum:
             )
 
             st.dataframe(
-                tabelle,
+                tabelle.style.format({"Zahlbetrag": euro}, na_rep=""),
                 hide_index=True,
                 column_config={
                     "Status": st.column_config.TextColumn(width="small"),
                     "Kaffees": st.column_config.NumberColumn(width="small"),
-                    "Zahlbetrag": st.column_config.NumberColumn(format="€ %.2f"),
                     "buchen": st.column_config.ButtonColumn(
                         "Zahlungseingang",
                         width="medium",

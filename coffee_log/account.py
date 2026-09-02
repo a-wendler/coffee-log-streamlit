@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+import pandas as pd
 import streamlit as st
 
 from database.queries import NULL_BETRAG, get_offene_rechnungen, get_user_konten
@@ -71,18 +72,22 @@ with col3:
     st.metric("Kaffeeumsatz gesamt", euro(mitgliedskosten + gastkosten))
 
 st.subheader("offene Rechnungen")
+# Beträge über den Styler formatieren: NumberColumn kann nur einen Punkt als
+# Dezimaltrennzeichen. Die Werte bleiben Zahlen und lassen sich weiter sortieren.
 st.dataframe(
-    offene_rechnungen,
-    column_config={
-        "Betrag": st.column_config.NumberColumn(format="€ %g"),
-        "Datum": st.column_config.DatetimeColumn(format="DD.MM.YY"),
-    },
+    pd.DataFrame(offene_rechnungen, columns=["Datum", "Betrag", "Nutzer"]).style.format(
+        {"Betrag": euro}, na_rep=""
+    ),
+    hide_index=True,
+    column_config={"Datum": st.column_config.DatetimeColumn(format="DD.MM.YY")},
 )
 
 st.subheader("Saldi der Nutzenden")
 st.dataframe(
-    saldi,
-    column_config={"Saldo": st.column_config.NumberColumn(format="€ %g")},
+    pd.DataFrame(saldi, columns=["Name", "Vorname", "Mitglied", "Saldo"]).style.format(
+        {"Saldo": euro}, na_rep=""
+    ),
+    hide_index=True,
 )
 
 st.write(

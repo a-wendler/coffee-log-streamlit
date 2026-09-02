@@ -3,6 +3,7 @@
 import pandas as pd
 import streamlit as st
 
+from helpers import euro
 from database.queries import (
     get_monatslogs,
     get_monatspayments,
@@ -58,17 +59,20 @@ def widget_payments(payments):
         )
         return
     st.dataframe(
-        [
-            {
-                "Datum": payment.ts,
-                "Typ": payment.typ,
-                "Betrag": payment.betrag,
-                "Betreff": payment.betreff,
-            }
-            for payment in payments
-        ],
+        pd.DataFrame(
+            [
+                {
+                    "Datum": payment.ts,
+                    "Typ": payment.typ,
+                    "Betrag": payment.betrag,
+                    "Betreff": payment.betreff,
+                }
+                for payment in payments
+            ],
+            columns=["Datum", "Typ", "Betrag", "Betreff"],
+        ).style.format({"Betrag": euro}, na_rep=""),
+        hide_index=True,
         column_config={
-            "Betrag": st.column_config.NumberColumn(format="€ %g"),
             "Datum": st.column_config.DatetimeColumn("Datum", format="DD.MM.YY"),
         },
     )
@@ -77,11 +81,11 @@ def widget_payments(payments):
 def widget_saldo(saldo, offene_rechnungen):
     """Guthaben bzw. offener Betrag – mit Zahlungshinweis, wenn etwas offen ist."""
     if saldo < 0:
-        st.metric("offener Betrag", "€ " + str(saldo))
+        st.metric("offener Betrag", euro(saldo))
     elif saldo > 0:
-        st.metric("Ihr Guthaben", "€ " + str(saldo))
+        st.metric("Ihr Guthaben", euro(saldo))
     else:
-        st.metric("Ihr Saldo ist ausgeglichen", "€ 0")
+        st.metric("Ihr Saldo ist ausgeglichen", euro(0))
 
     # Die Zahlungsoptionen standen früher nur in der Rechnungs-E-Mail.
     if saldo < 0 or offene_rechnungen:
@@ -94,24 +98,34 @@ def widget_invoices(invoices):
         st.write("Keine Rechnungen gefunden.")
         return
     st.dataframe(
-        [
-            {
-                "Rechnungsmonat": invoice.monat,
-                "Zahlbetrag": invoice.gesamtbetrag,
-                "Kaffeekosten": invoice.kaffee_preis,
-                "Kaffeeanzahl": invoice.kaffee_anzahl,
-                "Einkäufe etc.": invoice.payment_betrag,
-                "bezahlt": invoice.bezahlt,
-            }
-            for invoice in invoices
-        ],
+        pd.DataFrame(
+            [
+                {
+                    "Rechnungsmonat": invoice.monat,
+                    "Zahlbetrag": invoice.gesamtbetrag,
+                    "Kaffeekosten": invoice.kaffee_preis,
+                    "Kaffeeanzahl": invoice.kaffee_anzahl,
+                    "Einkäufe etc.": invoice.payment_betrag,
+                    "bezahlt": invoice.bezahlt,
+                }
+                for invoice in invoices
+            ],
+            columns=[
+                "Rechnungsmonat",
+                "Zahlbetrag",
+                "Kaffeekosten",
+                "Kaffeeanzahl",
+                "Einkäufe etc.",
+                "bezahlt",
+            ],
+        ).style.format(
+            {"Zahlbetrag": euro, "Kaffeekosten": euro, "Einkäufe etc.": euro},
+            na_rep="",
+        ),
+        hide_index=True,
         column_config={
-            "Betrag": st.column_config.NumberColumn("Rechnungsbetrag", format="€ %g"),
             "Rechnungsmonat": st.column_config.DatetimeColumn(
                 "Rechnungsmonat", format="MMM YYYY"
-            ),
-            "Einkäufe etc.": st.column_config.NumberColumn(
-                "Einkäufe etc.", format="€ %g"
             ),
             "bezahlt": st.column_config.DatetimeColumn(
                 "bezahlt am", format="DD.MM.YYYY"

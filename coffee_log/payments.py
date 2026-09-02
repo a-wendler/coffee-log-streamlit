@@ -213,7 +213,10 @@ with st.form(key="edit_payment_data"):
         # Damit waren ID und Einzahler bearbeitbar, ohne dass es Wirkung hatte.
         disabled=["ID", "Einzahler"],
         column_config={
-            "Betrag": st.column_config.NumberColumn("Betrag", format="€ %.2f"),
+            # Die Spalte bleibt editierbar, deshalb kein Styler (den ignoriert
+            # der data_editor). "euro" formatiert nach der Spracheinstellung des
+            # Browsers, auf Deutsch also "3,00 €".
+            "Betrag": st.column_config.NumberColumn("Betrag", format="euro"),
             "Typ": st.column_config.SelectboxColumn(
                 "Typ", options=["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"]
             ),
