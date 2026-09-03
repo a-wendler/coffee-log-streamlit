@@ -528,10 +528,22 @@ def edit_user_data():
             num_rows="fixed",
             key="data_editor",
             disabled=["id"],
+            # Der Zeilenindex von pandas ist keine Information, sondern nur die
+            # Position in der Tabelle. Gespeichert wird ohnehin über die Spalte
+            # "id", nicht über die Zeilennummer -- das Ausblenden ändert daran
+            # nichts.
+            hide_index=True,
         )
         if st.button("Änderungen speichern"):
-            for index, row in edited_df.iterrows():
-                user = session.query(User).filter(User.id == row["id"]).first()
+            for _, row in edited_df.iterrows():
+                user = session.get(User, int(row["id"]))
+                if user is None:
+                    session.rollback()
+                    st.error(
+                        f"Nutzer {row['id']} existiert nicht mehr. "
+                        "Bitte laden Sie die Seite neu."
+                    )
+                    return
                 user.name = row["name"]
                 user.vorname = row["vorname"]
                 user.mitglied = row["mitglied"]
