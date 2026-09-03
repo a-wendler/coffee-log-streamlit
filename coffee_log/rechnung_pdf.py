@@ -197,7 +197,12 @@ def rechnung_als_pdf(daten, zahlungsoptionen: str, kontakt_rechnung: str,
     return bytes(pdf.output())
 
 
-def dateiname(daten) -> str:
-    """Dateiname der Rechnung, z. B. Kaffeerechnung-2026-08-Bohne.pdf."""
-    nachname = "".join(z for z in daten.name if z.isalnum()) or "Rechnung"
-    return f"Kaffeerechnung-{daten.monat:%Y-%m}-{nachname}.pdf"
+def dateiname(monat, name: str) -> str:
+    """Dateiname der Rechnung, z. B. Kaffeerechnung-2026-08-Bohne.pdf.
+
+    Nimmt Monat und Nachnamen einzeln entgegen, nicht die ganzen
+    Rechnungsdaten: Der Name steht schon beim Aufbau der Seite fest, die
+    übrigen Daten werden erst beim Klick geladen.
+    """
+    sauber = "".join(z for z in name if z.isalnum()) or "Rechnung"
+    return f"Kaffeerechnung-{monat:%Y-%m}-{sauber}.pdf"

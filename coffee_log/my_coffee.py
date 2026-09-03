@@ -1,6 +1,7 @@
 """Persönliche Kaffeeübersicht."""
 
 from decimal import Decimal
+from functools import partial
 
 import pandas as pd
 import streamlit as st
@@ -125,7 +126,29 @@ def _rechnungszeile(felder, fett=False):
     return spalten[-1]
 
 
-def widget_invoices(invoices, pdf_daten, zahlungsoptionen):
+def pdf_erzeugen(conn, invoice_id, zahlungsoptionen, kontakt_rechnung,
+                 kontakt_technik) -> bytes:
+    """Baut die PDF-Rechnung - erst beim Klick auf den Knopf.
+
+    st.download_button ruft diese Funktion nur auf, wenn wirklich jemand
+    herunterlädt, und zwar in einem eigenen Thread. Beim Aufbau der Seite
+    kostet sie deshalb nichts. Würden die Bytes vorab übergeben, müsste jede
+    Rechnung des Jahres bei jedem Seitenaufbau gebaut werden - also ein
+    Dutzend PDFs, damit vielleicht eines geholt wird.
+
+    Streamlit-Aufrufe wären in diesem Thread wirkungslos, deshalb kommen die
+    Texte als Argumente herein statt aus st.secrets.
+    """
+    with conn.session as session:
+        daten = get_rechnungsdaten(session, invoice_id)
+    if daten is None:
+        return b""
+    return rechnung_als_pdf(
+        daten, zahlungsoptionen, kontakt_rechnung, kontakt_technik
+    )
+
+
+def widget_invoices(invoices, conn, nachname):
     """Rechnungsliste mit einem Herunterladen-Knopf je Zeile.
 
     Bewusst keine st.dataframe-Tabelle: Aus einer Tabellenzelle heraus lässt
@@ -135,6 +158,12 @@ def widget_invoices(invoices, pdf_daten, zahlungsoptionen):
     if not invoices:
         st.write("Für dieses Jahr gibt es keine Rechnungen.")
         return
+
+    # Einmal auslesen und weiterreichen: Im Thread des Downloads ist der
+    # Skriptkontext von Streamlit nicht verfügbar.
+    zahlungsoptionen = st.secrets.ZAHLUNGSOPTIONEN
+    kontakt_rechnung = st.secrets.admins["rechnung"]
+    kontakt_technik = st.secrets.admins["technik"]
 
     _rechnungszeile(
         ["Monat", "Tassen", "Kaffeekosten", "Zahlbetrag", "Status", ""], fett=True
@@ -157,26 +186,27 @@ def widget_invoices(invoices, pdf_daten, zahlungsoptionen):
                 "",
             ]
         )
-
-        daten = pdf_daten.get(invoice.id)
-        if daten is None:
-            continue
         knopf.download_button(
             "PDF",
-            data=rechnung_als_pdf(
-                daten,
+            # partial statt lambda: In einer Schleife würde ein lambda die
+            # Rechnungsnummer erst beim Aufruf nachschlagen und für alle
+            # Knöpfe dieselbe letzte Rechnung liefern.
+            data=partial(
+                pdf_erzeugen,
+                conn,
+                invoice.id,
                 zahlungsoptionen,
-                st.secrets.admins["rechnung"],
-                st.secrets.admins["technik"],
+                kontakt_rechnung,
+                kontakt_technik,
             ),
-            file_name=dateiname(daten),
+            file_name=dateiname(invoice.monat, nachname),
             mime="application/pdf",
             key=f"pdf_{invoice.id}",
             width="stretch",
         )
 
 
-def widget_rechnungen(invoices, conn):
+def widget_rechnungen(invoices, conn, nachname):
     """Jahresauswahl und Rechnungsliste."""
     if not invoices:
         st.write("Keine Rechnungen gefunden.")
@@ -191,15 +221,7 @@ def widget_rechnungen(invoices, conn):
         key=lambda invoice: invoice.monat,
         reverse=True,
     )
-
-    # Die PDF-Daten nur für das gewählte Jahr laden, in einer Session.
-    with conn.session as session:
-        pdf_daten = {
-            invoice.id: get_rechnungsdaten(session, invoice.id)
-            for invoice in des_jahres
-        }
-
-    widget_invoices(des_jahres, pdf_daten, st.secrets.ZAHLUNGSOPTIONEN)
+    widget_invoices(des_jahres, conn, nachname)
 
 
 st.header("Meine Kaffeeübersicht")
@@ -257,4 +279,4 @@ if datum:
     st.write(
         f"Rechnungen werden immer am Anfang eines Monats für den zurückliegenden Monat erstellt. Wenn Sie (z. B. wegen Urlaub) in einem Monat keinen Kaffee getrunken haben, wird auch keine Rechnung erstellt. Rechnungen gelten als bezahlt, sobald {st.secrets.admins.rechnung} den Rechnungseingang verbucht hat. Rechnungen mit einem negativen Betrag sind Guthaben. Solche Rechnungen sind immer automatisch als bezahlt markiert. Das Guthaben wird auf zukünftige Rechnungen angerechnet. Wenn Ihr Guthaben zu groß wird, können Sie sich das Guthaben bei {st.secrets.admins.rechnung} auszahlen lassen."
     )
-    widget_rechnungen(invoices, conn)
+    widget_rechnungen(invoices, conn, st.session_state.user.name)
