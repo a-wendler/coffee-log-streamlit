@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -42,3 +43,8 @@ def monatsbereich(datum):
 def euro(betrag) -> str:
     """Formatiert einen Betrag als € mit deutschem Dezimalkomma."""
     return "€ " + f"{Decimal(betrag):.2f}".replace(".", ",")
+
+
+def is_valid_email(email) -> bool:
+    """Grobe Plausibilitätsprüfung einer E-Mail-Adresse."""
+    return re.match(r"^[\+\w\.-]+@[\w\.-]+\.\w+$", email) is not None

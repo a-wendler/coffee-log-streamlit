@@ -31,70 +31,118 @@ def tokens():
 
 
 def activate():
-    """Check if token is valid and activate user."""
+    """Kennwort vergeben und damit das eingeladene Konto aktivieren.
+
+    Admins legen Konten ohne Kennwort an. Erst über den Einladungslink vergibt
+    die eingeladene Person selbst eines; vorher steht das Konto auf "new" und
+    der Login funktioniert nicht.
+    """
     with conn.session as session:
-        try:
-            user = session.scalar(
-                select(User).where(User.token == st.query_params.token)
+        user = session.scalar(
+            select(User).where(
+                User.token == st.query_params.token, User.status == "new"
             )
-            if user:
-                user.status = "active"
-                user.token = None
-                session.commit()
-                st.success("Ihr Konto wurde aktiviert!")
-            else:
-                st.error("Ungültiger Link!")
-                back = st.button("Zurück zur Startseite", on_click=clear_params)
-                if back:
-                    st.query_params.clear()
-        except Exception as e:
-            session.rollback()
-            st.error(
-                "Fehler beim Aktivieren des Accounts. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
-            )
-            logger.error(f"Fehler beim Aktivieren des Accounts: {e}")
+        )
+        if not user:
+            st.error("Ungültiger Link!")
             back = st.button("Zurück zur Startseite", on_click=clear_params)
             if back:
                 st.query_params.clear()
+            return
+
+        st.subheader("Konto aktivieren")
+        st.write(
+            f"Willkommen, {user.vorname} {user.name}! "
+            "Bitte vergeben Sie ein Kennwort, mit dem Sie sich künftig anmelden."
+        )
+        with st.form(key="aktivieren"):
+            kennwort = st.text_input("Kennwort", type="password")
+            bestaetigung = st.text_input("Kennwort bestätigen", type="password")
+            speichern = st.form_submit_button("Konto aktivieren", type="primary")
+
+        if not speichern:
+            return
+        if not kennwort:
+            st.error("Bitte geben Sie ein Kennwort ein.")
+            return
+        if kennwort != bestaetigung:
+            st.error("Die Kennworte stimmen nicht überein.")
+            return
+
+        try:
+            user.code = sha256(kennwort.encode("utf-8")).hexdigest()
+            user.status = "active"
+            user.token = None
+            session.commit()
+            st.success(
+                "Ihr Konto wurde aktiviert! Sie können sich jetzt mit Ihrem Kennwort anmelden."
+            )
+            logger.success(f"Konto {user.id} aktiviert.")
+            back = st.button("Zurück zur Startseite", on_click=clear_params)
+            if back:
+                st.query_params.clear()
+        except Exception as e:
+            session.rollback()
+            # Das Kennwort ist zugleich der Login-Schlüssel und muss deshalb
+            # eindeutig sein: ein bereits vergebenes lässt sich nicht speichern.
+            logger.error(f"Fehler beim Aktivieren des Accounts: {e}")
+            st.error(
+                "Das Kennwort konnte nicht gespeichert werden. Bitte versuchen Sie es mit einem anderen Kennwort."
+            )
 
 
 def set_new_password():
-    """Check if reset_key is valid and ask user for new password."""
+    """Neues Kennwort über den Reset-Link vergeben.
+
+    Den Link erzeugt ein Admin unter "Nutzer verwalten" und gibt ihn selbst
+    weiter; die App verschickt keine E-Mails.
+    """
     with conn.session as session:
-        try:
-            user = session.scalar(
-                select(User).where(
-                    User.token == st.query_params.token, User.status == "active"
-                )
+        user = session.scalar(
+            select(User).where(
+                User.token == st.query_params.token, User.status == "active"
             )
-            # st.write(user)
-            if user:
-                new_password = st.text_input("Neues Kennwort", type="password")
-                if st.button("Neues Kennwort speichern"):
-                    user.code = sha256(new_password.encode("utf-8")).hexdigest()
-                    user.token = None
-                    session.commit()
-
-                    st.write("Kennwort wurde geändert!")
-                    logger.success(f"Passwort für User {user.id} erfolgreich geändert.")
-                    back = st.button("Zurück zur Startseite", on_click=clear_params)
-                    if back:
-                        st.query_params.clear()
-
-            else:
-                st.error("Ungültiger Link!")
-                back = st.button("Zurück zur Startseite", on_click=clear_params)
-                if back:
-                    st.query_params.clear()
-        except Exception as e:
-            session.rollback()
-            st.error(
-                "Fehler beim Zurücksetzen des Passworts. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator."
-            )
-            logger.error(f"Fehler beim Zurücksetzen des Passworts: {e}")
+        )
+        if not user:
+            st.error("Ungültiger Link!")
             back = st.button("Zurück zur Startseite", on_click=clear_params)
             if back:
                 st.query_params.clear()
+            return
+
+        st.subheader("Neues Kennwort vergeben")
+        st.write(f"Hallo, {user.vorname} {user.name}!")
+        with st.form(key="neues_kennwort"):
+            kennwort = st.text_input("Neues Kennwort", type="password")
+            bestaetigung = st.text_input("Kennwort bestätigen", type="password")
+            speichern = st.form_submit_button("Kennwort speichern", type="primary")
+
+        if not speichern:
+            return
+        if not kennwort:
+            st.error("Bitte geben Sie ein Kennwort ein.")
+            return
+        if kennwort != bestaetigung:
+            st.error("Die Kennworte stimmen nicht überein.")
+            return
+
+        try:
+            user.code = sha256(kennwort.encode("utf-8")).hexdigest()
+            user.token = None
+            session.commit()
+            st.success("Ihr Kennwort wurde geändert!")
+            logger.success(f"Kennwort für User {user.id} erfolgreich geändert.")
+            back = st.button("Zurück zur Startseite", on_click=clear_params)
+            if back:
+                st.query_params.clear()
+        except Exception as e:
+            session.rollback()
+            # Das Kennwort ist zugleich der Login-Schlüssel und muss deshalb
+            # eindeutig sein: ein bereits vergebenes lässt sich nicht speichern.
+            logger.error(f"Fehler beim Zurücksetzen des Kennworts: {e}")
+            st.error(
+                "Das Kennwort konnte nicht gespeichert werden. Bitte versuchen Sie es mit einem anderen Kennwort."
+            )
 
 
 # Streamlit app layout
@@ -108,9 +156,6 @@ conn = get_connection()
 
 # Seiten ohne Login
 home = st.Page("home.py", title="Start", icon=":material/home:", default=True)
-register = st.Page(
-    "register.py", title="Registrieren", icon=":material/assignment_ind:"
-)
 login_page = st.Page("login_page.py", title="Anmelden", icon=":material/login:")
 
 # Seiten mit Login
@@ -131,16 +176,14 @@ mietzahlungen = st.Page(
     "mietzahlungen.py", title="Mietzahlungen", icon=":material/attach_money:"
 )
 if "user" in st.session_state:
-    standard_pages = [home, register]
+    standard_pages = [home]
 else:
-    standard_pages = [home, register, login_page]
+    standard_pages = [home, login_page]
 admin_pages = [payments, abrechnung, users, konto, mietzahlungen]
 login_pages = [
     my_coffee,
     logout_page,
 ]
-passwort_reset_page = st.Page(set_new_password, title="Passwort zurücksetzen")
-
 st.title("☕ LSB Kaffeeabrechnung")
 
 page_dict = {}
