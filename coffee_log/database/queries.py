@@ -342,3 +342,125 @@ def get_abschluss_daten(session, user_id: int) -> Optional[AbschlussDaten]:
 def get_rechnungen(session, user_id: int) -> List[Invoice]:
     """Alle Rechnungen einer Person."""
     return list(session.scalars(select(Invoice).where(Invoice.user_id == user_id)))
+
+
+@dataclass(frozen=True)
+class Rechnungsdaten:
+    """Alles, was auf der PDF-Rechnung steht."""
+
+    invoice_id: int
+    monat: datetime
+    erstellt: datetime
+    bezahlt: Optional[datetime]
+    vorname: str
+    name: str
+    email: str
+    kaffee_anzahl: int
+    kaffee_preis: Decimal
+    preis_je_tasse: Decimal
+    zahlbetrag: Decimal
+    zahlungen: List[dict]
+    zahlungen_summe: Decimal
+    saldo_vorher: Decimal
+    saldo_nachher: Decimal
+
+    @property
+    def angerechnetes_guthaben(self) -> Decimal:
+        """Guthaben, das mit den Kaffeekosten verrechnet wurde.
+
+        Die Differenz aus Kaffeekosten und Zahlbetrag: genau der Teil, den die
+        Person nicht überweisen muss, weil er schon auf ihrem Konto lag.
+        """
+        return self.kaffee_preis - self.zahlbetrag
+
+    @property
+    def zahlung_noetig(self) -> bool:
+        return self.zahlbetrag > NULL_BETRAG and self.bezahlt is None
+
+
+def _saldo_stichtag(
+    session, user_id: int, zahlungen_bis: datetime, rechnungen_bis: datetime
+) -> Decimal:
+    """Saldo mit getrennten Stichtagen für Zahlungen und Rechnungen.
+
+    Der Kontostand steht nirgends in der Datenbank, er wird immer aus allen
+    Zeilen gerechnet. Für eine Rechnung wird er hier so nachgestellt, wie ihn
+    die Monatsabrechnung gesehen hat: Die Buchungen des Monats zählen bereits
+    mit (sie lagen beim Abrechnen ja vor), die Kaffeekosten des Monats noch
+    nicht - genau das ist die Spalte "Guthaben alt" in der Abrechnung.
+
+    Eine Zahlung, die erst nach dem Abrechnen mit einem Datum aus dem Monat
+    nachgetragen wird, verschiebt den Wert nachträglich. Ohne gespeicherten
+    Zwischenstand lässt sich das nicht vermeiden.
+    """
+    zahlungen = (
+        select(_summe(Payment.betrag))
+        .where(Payment.user_id == user_id, Payment.ts < zahlungen_bis)
+        .scalar_subquery()
+    )
+    rechnungen = (
+        select(_summe(Invoice.kaffee_preis))
+        .where(Invoice.user_id == user_id, Invoice.monat < rechnungen_bis)
+        .scalar_subquery()
+    )
+    return session.scalar(select(zahlungen - rechnungen))
+
+
+def get_rechnungsdaten(session, invoice_id: int) -> Optional[Rechnungsdaten]:
+    """Eine Rechnung mit allem Drumherum für die PDF-Ausgabe."""
+    rechnung = session.get(Invoice, invoice_id)
+    if rechnung is None:
+        return None
+
+    user = session.get(User, rechnung.user_id)
+    start, ende = monatsbereich(rechnung.monat)
+
+    # Alle Arten, nicht nur die drei aus der Abrechnung: Nur dann geht die
+    # Rechnung auf der PDF auch auf. Saldo vorher minus Kaffeekosten plus
+    # diese Buchungen ergibt genau den Saldo nachher - wer nachrechnet, soll
+    # nicht über eine fehlende Einzahlung stolpern.
+    zahlungen = [
+        {
+            "ts": ts,
+            "typ": typ,
+            "betrag": betrag,
+            "betreff": betreff or "",
+        }
+        for ts, typ, betrag, betreff in session.execute(
+            select(Payment.ts, Payment.typ, Payment.betrag, Payment.betreff)
+            .where(
+                Payment.user_id == rechnung.user_id,
+                Payment.ts >= start,
+                Payment.ts < ende,
+            )
+            .order_by(Payment.ts)
+        )
+    ]
+
+    # Der Preis je Tasse steckt nicht in der Tabelle: Er ergibt sich aus der
+    # Rechnung selbst und stimmt auch dann noch, wenn die Person später vom
+    # Gast zum Mitglied geworden ist.
+    if rechnung.kaffee_anzahl:
+        je_tasse = (rechnung.kaffee_preis / rechnung.kaffee_anzahl).quantize(
+            Decimal("0.01")
+        )
+    else:
+        je_tasse = NULL_BETRAG
+
+    return Rechnungsdaten(
+        invoice_id=rechnung.id,
+        monat=rechnung.monat,
+        erstellt=rechnung.ts,
+        bezahlt=rechnung.bezahlt,
+        vorname=user.vorname,
+        name=user.name,
+        email=user.email,
+        kaffee_anzahl=rechnung.kaffee_anzahl,
+        kaffee_preis=rechnung.kaffee_preis,
+        preis_je_tasse=je_tasse,
+        zahlbetrag=rechnung.gesamtbetrag,
+        zahlungen=zahlungen,
+        zahlungen_summe=sum((z["betrag"] for z in zahlungen), NULL_BETRAG),
+        saldo_vorher=_saldo_stichtag(session, rechnung.user_id, ende, start),
+        saldo_nachher=_saldo_stichtag(session, rechnung.user_id, ende, ende),
+    )

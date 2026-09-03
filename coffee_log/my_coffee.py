@@ -9,11 +9,13 @@ from database.queries import (
     get_monatslogs,
     get_monatspayments,
     get_rechnungen,
+    get_rechnungsdaten,
     get_saldo,
     hat_mietzahlung,
 )
 from db import get_connection
 from helpers import euro, get_first_days_of_last_six_months, monatsname
+from rechnung_pdf import dateiname, rechnung_als_pdf
 
 def widget_kaffee_anzahl(logs):
     """Tassenzahl des Monats und Aufstellung nach Tagen."""
@@ -111,46 +113,93 @@ def widget_saldo(saldo):
         st.metric("Ihr Saldo ist ausgeglichen", euro(0))
 
 
-def widget_invoices(invoices):
-    """Alle Rechnungen der angemeldeten Person."""
+# Breiten so gewählt, dass "Kaffeekosten" in eine Zeile passt.
+SPALTEN = [2.0, 0.9, 1.6, 1.5, 1.5, 1.2]
+
+
+def _rechnungszeile(felder, fett=False):
+    """Eine Zeile der Rechnungsliste; die letzte Spalte bleibt für den Knopf."""
+    spalten = st.columns(SPALTEN, vertical_alignment="center")
+    for spalte, text in zip(spalten, felder):
+        spalte.markdown(f"**{text}**" if fett else text)
+    return spalten[-1]
+
+
+def widget_invoices(invoices, pdf_daten, zahlungsoptionen):
+    """Rechnungsliste mit einem Herunterladen-Knopf je Zeile.
+
+    Bewusst keine st.dataframe-Tabelle: Aus einer Tabellenzelle heraus lässt
+    sich kein Download auslösen, ein ButtonColumn kann nur einen Callback
+    aufrufen. Mit eigenen Zeilen genügt ein Klick.
+    """
+    if not invoices:
+        st.write("Für dieses Jahr gibt es keine Rechnungen.")
+        return
+
+    _rechnungszeile(
+        ["Monat", "Tassen", "Kaffeekosten", "Zahlbetrag", "Status", ""], fett=True
+    )
+    for invoice in invoices:
+        if invoice.bezahlt:
+            status = "✅ bezahlt"
+        elif invoice.gesamtbetrag > 0:
+            status = "❗ offen"
+        else:
+            status = "✅ ausgeglichen"
+
+        knopf = _rechnungszeile(
+            [
+                monatsname(invoice.monat),
+                str(invoice.kaffee_anzahl),
+                euro(invoice.kaffee_preis),
+                euro(invoice.gesamtbetrag),
+                status,
+                "",
+            ]
+        )
+
+        daten = pdf_daten.get(invoice.id)
+        if daten is None:
+            continue
+        knopf.download_button(
+            "PDF",
+            data=rechnung_als_pdf(
+                daten,
+                zahlungsoptionen,
+                st.secrets.admins["rechnung"],
+                st.secrets.admins["technik"],
+            ),
+            file_name=dateiname(daten),
+            mime="application/pdf",
+            key=f"pdf_{invoice.id}",
+            width="stretch",
+        )
+
+
+def widget_rechnungen(invoices, conn):
+    """Jahresauswahl und Rechnungsliste."""
     if not invoices:
         st.write("Keine Rechnungen gefunden.")
         return
-    st.dataframe(
-        pd.DataFrame(
-            [
-                {
-                    "Rechnungsmonat": invoice.monat,
-                    "Zahlbetrag": invoice.gesamtbetrag,
-                    "Kaffeekosten": invoice.kaffee_preis,
-                    "Kaffeeanzahl": invoice.kaffee_anzahl,
-                    "Einkäufe etc.": invoice.payment_betrag,
-                    "bezahlt": invoice.bezahlt,
-                }
-                for invoice in invoices
-            ],
-            columns=[
-                "Rechnungsmonat",
-                "Zahlbetrag",
-                "Kaffeekosten",
-                "Kaffeeanzahl",
-                "Einkäufe etc.",
-                "bezahlt",
-            ],
-        ).style.format(
-            {"Zahlbetrag": euro, "Kaffeekosten": euro, "Einkäufe etc.": euro},
-            na_rep="",
-        ),
-        hide_index=True,
-        column_config={
-            "Rechnungsmonat": st.column_config.DatetimeColumn(
-                "Rechnungsmonat", format="MMM YYYY"
-            ),
-            "bezahlt": st.column_config.DatetimeColumn(
-                "bezahlt am", format="DD.MM.YYYY"
-            ),
-        },
+
+    jahre = sorted({invoice.monat.year for invoice in invoices}, reverse=True)
+    jahr = st.selectbox("Jahr", jahre, key="rechnungsjahr")
+
+    # neueste zuerst: die aktuelle Rechnung ist die, nach der man sucht
+    des_jahres = sorted(
+        (invoice for invoice in invoices if invoice.monat.year == jahr),
+        key=lambda invoice: invoice.monat,
+        reverse=True,
     )
+
+    # Die PDF-Daten nur für das gewählte Jahr laden, in einer Session.
+    with conn.session as session:
+        pdf_daten = {
+            invoice.id: get_rechnungsdaten(session, invoice.id)
+            for invoice in des_jahres
+        }
+
+    widget_invoices(des_jahres, pdf_daten, st.secrets.ZAHLUNGSOPTIONEN)
 
 
 st.header("Meine Kaffeeübersicht")
@@ -208,4 +257,4 @@ if datum:
     st.write(
         f"Rechnungen werden immer am Anfang eines Monats für den zurückliegenden Monat erstellt. Wenn Sie (z. B. wegen Urlaub) in einem Monat keinen Kaffee getrunken haben, wird auch keine Rechnung erstellt. Rechnungen gelten als bezahlt, sobald {st.secrets.admins.rechnung} den Rechnungseingang verbucht hat. Rechnungen mit einem negativen Betrag sind Guthaben. Solche Rechnungen sind immer automatisch als bezahlt markiert. Das Guthaben wird auf zukünftige Rechnungen angerechnet. Wenn Ihr Guthaben zu groß wird, können Sie sich das Guthaben bei {st.secrets.admins.rechnung} auszahlen lassen."
     )
-    widget_invoices(invoices)
+    widget_rechnungen(invoices, conn)
