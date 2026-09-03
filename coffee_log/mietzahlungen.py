@@ -69,8 +69,15 @@ if datum:
                 )
             )
         )
+        # Nur aktive Mitglieder: Ausgeschiedene bleiben "mitglied", damit ihre
+        # alten Kaffees in account.py weiter als Mitgliederkaffees zählen -
+        # Miete zahlen sie aber nicht mehr.
         mitglieder = list(
-            session.scalars(select(User).where(User.mitglied == 1).order_by(User.name))
+            session.scalars(
+                select(User)
+                .where(User.mitglied == 1, User.status == "active")
+                .order_by(User.name)
+            )
         )
 
     # offene zuerst, innerhalb der Gruppen nach Nachname

@@ -12,7 +12,7 @@ import calendar
 import hashlib
 import math
 
-from database.models import User, Payment
+from database.models import PAYMENT_TYPEN, PAYMENT_TYPEN_MANUELL, User, Payment
 from db import get_connection
 
 def new_payment():
@@ -122,7 +122,7 @@ with st.form(key="payment_form", clear_on_submit=True):
     betreff = st.text_input("Betreff", key="betreff")
     typ = st.selectbox(
         "Typ",
-        ["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"],
+        PAYMENT_TYPEN_MANUELL,
         key="typ",
     )
     betrag = st.number_input("Betrag", key="betrag")
@@ -171,7 +171,7 @@ with st.expander('Tabelle filtern'):
 
         filter_typ = right.multiselect(
             "Typ",
-            ["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"],
+            PAYMENT_TYPEN,
             key="f_typ"
         )
 
@@ -248,9 +248,9 @@ with tabellen_bereich, st.form(key="edit_payment_data"):
             # der data_editor). "euro" formatiert nach der Spracheinstellung des
             # Browsers, auf Deutsch also "3,00 €".
             "Betrag": st.column_config.NumberColumn("Betrag", format="euro"),
-            "Typ": st.column_config.SelectboxColumn(
-                "Typ", options=["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"]
-            ),
+            # Alle Arten, auch "Abschluss": Eine Zeile mit einem Wert, der
+            # nicht in den Optionen steht, lässt sich im Editor nicht anzeigen.
+            "Typ": st.column_config.SelectboxColumn("Typ", options=PAYMENT_TYPEN),
             "Datum": st.column_config.DateColumn("Datum", format="DD.MM.YYYY"),
         },
     )

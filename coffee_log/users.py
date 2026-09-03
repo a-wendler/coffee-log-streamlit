@@ -8,10 +8,20 @@ from urllib.parse import urlsplit, urlunsplit
 import streamlit as st
 import pandas as pd
 from loguru import logger
-from database.models import User
+from database.models import STATUS_WERTE, User
+from database.queries import get_abschluss_daten
 from sqlalchemy import select
 from db import get_connection
-from helpers import is_valid_email
+from helpers import euro, is_valid_email, monatsname
+from nutzer_verwaltung import (
+    AUSGEBUCHT,
+    BEZAHLT,
+    NutzerFehler,
+    abschluss_buchen,
+    loeschen,
+    reaktivieren,
+    stilllegen,
+)
 
 
 def token_link(token):
@@ -239,6 +249,241 @@ def neuen_nutzer_formular():
             neuen_nutzer_anlegen(vorname, name, email, mitglied, ist_admin)
 
 
+def stilllegen_ausfuehren(user_id):
+    with conn.session as session:
+        try:
+            name = stilllegen(session, user_id)
+        except NutzerFehler as fehler:
+            st.error(str(fehler))
+            return
+        except Exception as fehler:
+            session.rollback()
+            logger.error(f"Stilllegen von {user_id} fehlgeschlagen: {fehler}")
+            st.error("Das Konto konnte nicht stillgelegt werden.")
+            return
+
+    logger.success(f"Konto {user_id} stillgelegt.")
+    st.success(
+        f"{name} wurde stillgelegt und kann sich nicht mehr anmelden. Alle "
+        "Kaffees und Zahlungen bleiben in den Auswertungen."
+    )
+
+
+def reaktivieren_ausfuehren(user_id):
+    with conn.session as session:
+        try:
+            name = reaktivieren(session, user_id)
+        except NutzerFehler as fehler:
+            st.error(str(fehler))
+            return
+        except Exception as fehler:
+            session.rollback()
+            logger.error(f"Reaktivieren von {user_id} fehlgeschlagen: {fehler}")
+            st.error("Das Konto konnte nicht wieder aktiviert werden.")
+            return
+
+    logger.success(f"Konto {user_id} wieder aktiviert.")
+    st.success(
+        f"{name} ist wieder aktiv und kann sich mit dem alten Kennwort anmelden."
+    )
+
+
+def abschluss_ausfuehren(user_id, art):
+    with conn.session as session:
+        try:
+            betrag = abschluss_buchen(session, user_id, art)
+        except NutzerFehler as fehler:
+            st.error(str(fehler))
+            return
+        except Exception as fehler:
+            session.rollback()
+            logger.error(f"Abschluss für {user_id} fehlgeschlagen: {fehler}")
+            st.error("Die Schlussabrechnung konnte nicht gebucht werden.")
+            return
+
+    logger.success(f"Abschluss für Konto {user_id} gebucht: {betrag} ({art}).")
+    st.success(f"Schlussabrechnung gebucht: {euro(betrag)}. Der Saldo steht auf 0.")
+
+
+def loeschen_ausfuehren(user_id):
+    with conn.session as session:
+        try:
+            name = loeschen(session, user_id)
+        except NutzerFehler as fehler:
+            st.error(str(fehler))
+            return
+        except Exception as fehler:
+            session.rollback()
+            logger.error(f"Löschen von {user_id} fehlgeschlagen: {fehler}")
+            st.error("Das Konto konnte nicht gelöscht werden.")
+            return
+
+    logger.success(f"Konto {user_id} gelöscht.")
+    st.success(f"{name} wurde gelöscht.")
+
+
+def stand_anzeigen(daten):
+    """Saldo, offene Rechnungen und noch nicht abgerechnete Kaffees."""
+    spalte1, spalte2, spalte3 = st.columns(3)
+    spalte1.metric("Saldo", euro(daten.saldo))
+    spalte2.metric(
+        "offene Rechnungen",
+        str(daten.offene_rechnungen),
+        help=f"Summe: {euro(daten.offener_betrag)}",
+    )
+    spalte3.metric("nicht abgerechnete Kaffees", str(daten.unabgerechnete_kaffees))
+
+
+def ausscheiden_formular():
+    """Konto stilllegen: kein Login mehr, Historie bleibt vollständig."""
+    eigene_id = st.session_state.user.id
+    with conn.session as session:
+        aktive = list(
+            session.scalars(
+                select(User)
+                .where(User.status == "active", User.id != eigene_id)
+                .order_by(User.name)
+            )
+        )
+
+    if not aktive:
+        st.write("Es gibt keine weiteren aktiven Konten.")
+        return
+
+    st.write(
+        "Wer die Firma verlässt, wird stillgelegt statt gelöscht: Die Person "
+        "kann sich nicht mehr anmelden und bekommt keine neuen Rechnungen, ihre "
+        "Kaffees und Zahlungen zählen aber weiter in allen Summen mit. Das "
+        "eigene Konto steht nicht zur Auswahl."
+    )
+    namen = {u.id: f"{u.name}, {u.vorname} ({u.email})" for u in aktive}
+    gewaehlt = st.selectbox(
+        "Person",
+        options=list(namen),
+        format_func=lambda i: namen[i],
+        key="ausscheiden_auswahl",
+    )
+
+    with conn.session as session:
+        daten = get_abschluss_daten(session, gewaehlt)
+    if daten is None:
+        return
+
+    stand_anzeigen(daten)
+    if not daten.abschlussfaehig:
+        monate = ", ".join(monatsname(m) for m in daten.unabgerechnete_monate)
+        st.info(
+            f"Aus {monate} sind noch Kaffees offen. Legen Sie das Konto ruhig "
+            "jetzt still - die Schlussabrechnung ist danach möglich, sobald die "
+            "Monatsabrechnung gelaufen ist."
+        )
+
+    st.button(
+        "Konto stilllegen",
+        type="primary",
+        on_click=stilllegen_ausfuehren,
+        args=(gewaehlt,),
+    )
+
+
+def abschluss_block(daten):
+    """Schlussabrechnung, Reaktivierung und Löschen für ein stillgelegtes Konto."""
+    stand_anzeigen(daten)
+
+    if not daten.abschlussfaehig:
+        monate = ", ".join(monatsname(m) for m in daten.unabgerechnete_monate)
+        st.warning(
+            f"{daten.unabgerechnete_kaffees} Kaffee(s) aus {monate} stehen in "
+            "keiner Rechnung. Solange sagt der Saldo nicht die Wahrheit über die "
+            "Schulden. Erst die Monatsabrechnung machen, dann hier abschließen."
+        )
+    elif daten.erledigt:
+        st.success("Nichts mehr offen - dieses Konto ist abgeschlossen.")
+    else:
+        betrag = daten.abschlussbetrag
+        if betrag > 0:
+            st.write(
+                f"**{daten.vorname} {daten.name} schuldet der Kasse "
+                f"{euro(betrag)}.** Wie soll der Betrag gebucht werden?"
+            )
+            beschriftungen = {
+                BEZAHLT: "Die Person hat beim Gehen bezahlt (Einzahlung)",
+                AUSGEBUCHT: "Die Gemeinschaft trägt den Betrag (Abschluss)",
+            }
+        else:
+            st.write(
+                f"**Die Kasse schuldet {daten.vorname} {daten.name} "
+                f"{euro(-betrag)}.** Wie soll der Betrag gebucht werden?"
+            )
+            beschriftungen = {
+                BEZAHLT: "Guthaben wurde ausgezahlt (Auszahlung)",
+                AUSGEBUCHT: "Guthaben bleibt der Kasse (Abschluss)",
+            }
+
+        art = st.radio(
+            "Buchungsart",
+            options=[BEZAHLT, AUSGEBUCHT],
+            format_func=lambda a: beschriftungen[a],
+            key=f"abschlussart_{daten.user_id}",
+        )
+        st.caption(
+            "Nur „bezahlt“ und „ausgezahlt“ verändern den Kassenstand. Ein "
+            "Abschluss gleicht das Konto aus, ohne dass Geld fließt."
+        )
+        st.button(
+            "Schlussabrechnung buchen",
+            type="primary",
+            on_click=abschluss_ausfuehren,
+            args=(daten.user_id, art),
+            key=f"abschluss_{daten.user_id}",
+        )
+
+    links, rechts = st.columns(2)
+    links.button(
+        "Konto wieder aktivieren",
+        on_click=reaktivieren_ausfuehren,
+        args=(daten.user_id,),
+        key=f"reaktivieren_{daten.user_id}",
+    )
+    if daten.hat_historie:
+        rechts.caption(
+            "Löschen nicht möglich: Das Konto hat Kaffees oder Zahlungen, die in "
+            "den Gesamtsummen stecken."
+        )
+    else:
+        rechts.button(
+            "Konto löschen",
+            on_click=loeschen_ausfuehren,
+            args=(daten.user_id,),
+            key=f"loeschen_{daten.user_id}",
+        )
+
+
+def ausgeschiedene():
+    """Alle stillgelegten Konten mit ihrem Abschlussstand."""
+    with conn.session as session:
+        stillgelegte = list(
+            session.scalars(
+                select(User).where(User.status == "inactive").order_by(User.name)
+            )
+        )
+        stand = [get_abschluss_daten(session, u.id) for u in stillgelegte]
+
+    offen = [d for d in stand if d and not d.erledigt]
+    with st.expander(
+        f"Ausgeschiedene Nutzer ({len(stand)}), davon {len(offen)} noch abzurechnen"
+    ):
+        if not stand:
+            st.write("Es gibt keine stillgelegten Konten.")
+            return
+        for daten in stand:
+            if daten is None:
+                continue
+            with st.container(border=True):
+                st.markdown(f"**{daten.vorname} {daten.name}**")
+                abschluss_block(daten)
+
+
 def edit_user_data():
     """Edit user data."""
     with conn.session as session:
@@ -269,6 +514,12 @@ def edit_user_data():
                     "Admin",
                     help="Hat die Person Zugriff auf Abrechnung, Nutzerdaten und Einkäufe?",
                     default=False,
+                ),
+                # Feste Auswahl statt Freitext: Ein selbst getippter Status wie
+                # "aktiv" sperrt die Person aus, weil der Login genau auf
+                # "active" prüft.
+                "status": st.column_config.SelectboxColumn(
+                    "Status", options=STATUS_WERTE, required=True
                 ),
             },
             # "fixed": neue Zeilen legen keinen Nutzer an (das Kennwort fehlt)
@@ -307,3 +558,7 @@ edit_user_data()
 st.subheader("Kennwort zurücksetzen")
 kennwort_link_formular()
 kennwort_link_anzeigen()
+
+st.subheader("Nutzer ausscheiden lassen")
+ausscheiden_formular()
+ausgeschiedene()

@@ -20,6 +20,9 @@ einzahlungen = sum((k.einzahlungen for k in konten), NULL_BETRAG)
 einkaeufe = -sum((k.einkaeufe for k in konten), NULL_BETRAG)
 auszahlungen = sum((k.auszahlungen for k in konten), NULL_BETRAG)
 korrekturen = sum((k.korrekturen for k in konten), NULL_BETRAG)
+# Abschlüsse beim Ausscheiden. Bewusst nicht im Kassenstand: Bei dieser
+# Buchung fließt kein Geld, sie gleicht nur das Konto der Person aus.
+abschluesse = sum((k.abschluesse for k in konten), NULL_BETRAG)
 
 offene_rechnungen_summe = sum(
     (rechnung["Betrag"] for rechnung in offene_rechnungen), NULL_BETRAG
@@ -56,6 +59,15 @@ with col1:
     st.metric("Auszahlungen", euro(auszahlungen))
     st.metric("Korrekturen", euro(korrekturen))
     st.metric("Kassenstand", euro(einzahlungen + auszahlungen + korrekturen))
+    st.metric(
+        "Abschlüsse (Ausscheiden)",
+        euro(abschluesse),
+        help=(
+            "Beim Ausscheiden ausgebuchte Beträge. Positiv: Schulden, welche "
+            "die Gemeinschaft getragen hat. Negativ: Guthaben, das der Kasse "
+            "geblieben ist. Kein Geldfluss, deshalb nicht im Kassenstand."
+        ),
+    )
     st.metric("offene Rechnungen", euro(offene_rechnungen_summe))
     st.metric("Einkäufe", euro(einkaeufe))
 

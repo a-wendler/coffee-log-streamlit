@@ -48,3 +48,25 @@ def euro(betrag) -> str:
 def is_valid_email(email) -> bool:
     """Grobe Plausibilitätsprüfung einer E-Mail-Adresse."""
     return re.match(r"^[\+\w\.-]+@[\w\.-]+\.\w+$", email) is not None
+
+
+# Streamlit liefert englische Monatsnamen; die Oberfläche ist deutsch.
+MONATSNAMEN = {
+    "January": "Januar",
+    "February": "Februar",
+    "March": "März",
+    "April": "April",
+    "May": "Mai",
+    "June": "Juni",
+    "July": "Juli",
+    "August": "August",
+    "September": "September",
+    "October": "Oktober",
+    "November": "November",
+    "December": "Dezember",
+}
+
+
+def monatsname(datum) -> str:
+    """Monat und Jahr auf Deutsch, z. B. „März 2026“."""
+    return MONATSNAMEN[datum.strftime("%B")] + " " + datum.strftime("%Y")

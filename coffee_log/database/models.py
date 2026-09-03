@@ -18,6 +18,24 @@ class Base(DeclarativeBase):
     pass
 
 
+# Kontostatus. "new" wartet auf die Aktivierung über den Einladungslink,
+# "active" darf sich anmelden, "inactive" ist ausgeschieden: kein Login mehr,
+# keine neuen Rechnungen - die Zeilen bleiben aber stehen, weil alle Summen
+# über die User-Tabelle gejoint werden und sonst rückwirkend kippen.
+STATUS_WERTE = ["new", "active", "inactive"]
+
+# Zahlungsarten. "Abschluss" gleicht das Konto einer ausgeschiedenen Person
+# aus, ohne dass Geld fließt: Die Art zählt in den Saldo (der summiert alle
+# Zahlungen), aber nicht in den Kassenstand (der zählt Einzahlung, Auszahlung
+# und Korrektur auf) - sonst stünde Geld in der Kasse, das nie angekommen ist.
+PAYMENT_TYPEN = ["Einkauf", "Korrektur", "Auszahlung", "Einzahlung", "Abschluss"]
+
+# Was im Zahlungsformular von Hand buchbar ist. "Abschluss" fehlt bewusst:
+# Diese Buchung entsteht nur über die Schlussabrechnung unter "Nutzer
+# verwalten", die den Betrag aus dem Saldo ausrechnet.
+PAYMENT_TYPEN_MANUELL = ["Einkauf", "Korrektur", "Auszahlung", "Einzahlung"]
+
+
 class Log(Base):
     """Model für einen Logbucheintrag"""
 
