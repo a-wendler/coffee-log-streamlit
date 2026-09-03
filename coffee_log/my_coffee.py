@@ -1,9 +1,10 @@
 """Persönliche Kaffeeübersicht."""
 
+from decimal import Decimal
+
 import pandas as pd
 import streamlit as st
 
-from helpers import euro
 from database.queries import (
     get_monatslogs,
     get_monatspayments,
@@ -12,27 +13,7 @@ from database.queries import (
     hat_mietzahlung,
 )
 from db import get_connection
-from helpers import get_first_days_of_last_six_months
-
-UEBERSETZUNGEN = {
-    "January": "Januar",
-    "February": "Februar",
-    "March": "März",
-    "April": "April",
-    "May": "Mai",
-    "June": "Juni",
-    "July": "Juli",
-    "August": "August",
-    "September": "September",
-    "October": "Oktober",
-    "November": "November",
-    "December": "Dezember",
-}
-
-
-def monatsname(datum) -> str:
-    return UEBERSETZUNGEN[datum.strftime("%B")] + " " + datum.strftime("%Y")
-
+from helpers import euro, get_first_days_of_last_six_months, monatsname
 
 def widget_kaffee_anzahl(logs):
     """Tassenzahl des Monats und Aufstellung nach Tagen."""
@@ -78,18 +59,56 @@ def widget_payments(payments):
     )
 
 
-def widget_saldo(saldo, offene_rechnungen):
-    """Guthaben bzw. offener Betrag – mit Zahlungshinweis, wenn etwas offen ist."""
+def widget_zahlungsstatus(saldo, offene_rechnungen):
+    """Die eine Frage, die jede Person hat: Muss ich etwas bezahlen?
+
+    Maßgeblich ist die Summe der offenen Rechnungen, nicht der Saldo: Nur eine
+    Rechnung ist eine konkrete Zahlungsaufforderung. Ein negativer Saldo ohne
+    offene Rechnung (etwa nach einer Korrektur) wird deshalb getrennt gemeldet
+    - er wird mit der nächsten Rechnung verrechnet.
+    """
+    faellig = sum((r.gesamtbetrag for r in offene_rechnungen), Decimal("0.00"))
+
+    if faellig > 0:
+        anzahl = len(offene_rechnungen)
+        monate = ", ".join(monatsname(r.monat) for r in offene_rechnungen)
+        st.error(
+            f"### ❗ Sie müssen noch {euro(faellig)} bezahlen\n\n"
+            + (
+                f"Offen ist die Rechnung für {monate}."
+                if anzahl == 1
+                else f"Offen sind {anzahl} Rechnungen: {monate}."
+            )
+        )
+        st.info(f"**So können Sie zahlen**\n\n{st.secrets.ZAHLUNGSOPTIONEN}")
+        return
+
+    if saldo < 0:
+        st.warning(
+            f"### Nichts zu bezahlen\n\nIhr Saldo steht bei {euro(saldo)}. "
+            "Dieser Betrag wird mit Ihrer nächsten Rechnung verrechnet."
+        )
+        return
+
+    if saldo > 0:
+        st.success(
+            f"### ✅ Sie haben nichts offen\n\nSie haben sogar ein Guthaben "
+            f"von {euro(saldo)}, das auf Ihre nächsten Rechnungen angerechnet "
+            "wird."
+        )
+        return
+
+    st.success("### ✅ Sie haben nichts offen\n\nIhr Konto ist ausgeglichen.")
+
+
+def widget_saldo(saldo):
+    """Guthaben bzw. offener Betrag als Zahl."""
     if saldo < 0:
         st.metric("offener Betrag", euro(saldo))
     elif saldo > 0:
         st.metric("Ihr Guthaben", euro(saldo))
     else:
         st.metric("Ihr Saldo ist ausgeglichen", euro(0))
-
-    # Die Zahlungsoptionen standen früher nur in der Rechnungs-E-Mail.
-    if saldo < 0 or offene_rechnungen:
-        st.info(f"**So können Sie zahlen**\n\n{st.secrets.ZAHLUNGSOPTIONEN}")
 
 
 def widget_invoices(invoices):
@@ -137,19 +156,39 @@ def widget_invoices(invoices):
 st.header("Meine Kaffeeübersicht")
 conn = get_connection()
 
+# Nach dem Eintragen auf der Startseite landet man hier. Die Bestätigung
+# kommt deshalb erst auf dieser Seite an.
+gebucht = st.session_state.pop("kaffee_gebucht", None)
+if gebucht:
+    st.success(
+        f"{gebucht} Kaffee eingetragen!"
+        if gebucht == 1
+        else f"{gebucht} Kaffees eingetragen!"
+    )
+
+user_id = st.session_state.user.id
+
+# Der Zahlungsstand gilt für das ganze Konto und hängt nicht am Monat. Er
+# steht deshalb noch vor der Monatsauswahl – es ist die Frage, mit der die
+# meisten diese Seite aufrufen.
+with conn.session as session:
+    saldo = get_saldo(session, user_id)
+    invoices = get_rechnungen(session, user_id)
+
+offene_rechnungen = [invoice for invoice in invoices if invoice.bezahlt is None]
+widget_zahlungsstatus(saldo, offene_rechnungen)
+
+st.divider()
 monate = get_first_days_of_last_six_months()
 datum = st.selectbox("Abrechnungsmonat", monate, format_func=monatsname)
 
 if datum:
-    # Alle Daten der Seite in einer einzigen Session laden, danach nur noch
+    # Die Monatsdaten in einer einzigen Session laden, danach nur noch
     # darstellen – so löst das Rendern keine weiteren Queries mehr aus.
-    user_id = st.session_state.user.id
     with conn.session as session:
         logs = get_monatslogs(session, user_id, datum)
         payments = get_monatspayments(session, user_id, datum)
         miete_bezahlt = hat_mietzahlung(session, user_id, datum)
-        saldo = get_saldo(session, user_id)
-        invoices = get_rechnungen(session, user_id)
 
     with st.container(border=True):
         st.subheader("Kaffeeanzahl im ausgewählten Monat")
@@ -162,12 +201,8 @@ if datum:
         else:
             st.write("❌ Ihre Mietzahlung ist noch nicht eingegangen.")
 
-    offene_rechnungen = [
-        invoice for invoice in invoices if invoice.bezahlt is None
-    ]
-
     st.subheader("Saldo insgesamt")
-    widget_saldo(saldo, offene_rechnungen)
+    widget_saldo(saldo)
     st.divider()
     st.subheader("Meine Rechnungen")
     st.write(

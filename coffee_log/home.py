@@ -11,29 +11,33 @@ from db import get_connection
 
 # Function to log a coffee
 def log_coffee(conn):
-    """Log a coffee entry."""
-    if "user" in st.session_state:
-        logger.info(f"User: {st.session_state.user.name}")
-        with conn.session as session:
-            try:
-                log = Log(
-                    user=st.session_state.user,
-                    ts=datetime.now(),
-                    anzahl=st.session_state.anzahl_slider,
-                )
-                log.save(session)
-                st.success("Ihr Kaffee wurde eingetragen!")
-                logger.success(
-                    f"{log.anzahl} Kaffee(s) eingetragen von {log.user.name}"
-                )
-            except Exception as e:
-                session.rollback()
-                st.error(f"Beim Eintragen des Kaffees ist ein Fehler aufgetreten: {e}")
-                logger.error(
-                    f"Kaffee konnte nicht eingetragen werden {log.user.name}: {e}"
-                )
-    else:
-        st.error("Ungültiges Kennwort oder Nutzerkonto nicht aktiviert!")
+    """Trägt den Kaffee ein. Gibt zurück, ob es geklappt hat."""
+    if "user" not in st.session_state:
+        # Ohne Anmeldung kommt man hier nur nach einem gescheiterten Login
+        # durch das Formular - login() hat die Meldung dazu schon ausgegeben.
+        return False
+
+    logger.info(f"User: {st.session_state.user.name}")
+    anzahl = st.session_state.anzahl_slider
+    with conn.session as session:
+        try:
+            log = Log(
+                user=st.session_state.user,
+                ts=datetime.now(),
+                anzahl=anzahl,
+            )
+            log.save(session)
+            logger.success(f"{anzahl} Kaffee(s) eingetragen von {log.user.name}")
+        except Exception as e:
+            session.rollback()
+            st.error(f"Beim Eintragen des Kaffees ist ein Fehler aufgetreten: {e}")
+            logger.error(f"Kaffee konnte nicht eingetragen werden: {e}")
+            return False
+
+    # Die Bestätigung zeigt die Kaffeeübersicht an, auf die es gleich
+    # weitergeht: Ein st.success hier wäre nach dem Seitenwechsel weg.
+    st.session_state["kaffee_gebucht"] = anzahl
+    return True
 
 # st.write(st.session_state)
 conn = get_connection()
@@ -59,8 +63,10 @@ with st.form(key="log_coffee", clear_on_submit=True):
             "Kaffee eintragen", type="primary", on_click=login, args=(conn,)
         )
 
-if submit:
-    log_coffee(conn)
+if submit and log_coffee(conn):
+    # Direkt zur eigenen Übersicht: Dort steht, was der Kaffee gekostet hat
+    # und ob noch etwas zu bezahlen ist.
+    st.switch_page("my_coffee.py")
 
 with st.expander("Kennwort vergessen?"):
     st.markdown(
