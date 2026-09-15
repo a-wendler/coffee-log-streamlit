@@ -175,11 +175,12 @@ konto = st.Page("account.py", title="Kontostand", icon=":material/account_balanc
 mietzahlungen = st.Page(
     "mietzahlungen.py", title="Mietzahlungen", icon=":material/attach_money:"
 )
+export = st.Page("export.py", title="Datenexport", icon=":material/download:")
 if "user" in st.session_state:
     standard_pages = [home]
 else:
     standard_pages = [home, login_page]
-admin_pages = [payments, abrechnung, users, konto, mietzahlungen]
+admin_pages = [payments, abrechnung, users, konto, mietzahlungen, export]
 login_pages = [
     my_coffee,
     logout_page,

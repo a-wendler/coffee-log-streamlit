@@ -464,3 +464,171 @@ def get_rechnungsdaten(session, invoice_id: int) -> Optional[Rechnungsdaten]:
         saldo_vorher=_saldo_stichtag(session, rechnung.user_id, ende, start),
         saldo_nachher=_saldo_stichtag(session, rechnung.user_id, ende, ende),
     )
+
+
+# --- Datenexport -----------------------------------------------------------
+#
+# Die drei Blätter der Excel-Mappe. Die Namen stehen hier schon aufgelöst in
+# den Zeilen: Wer die Mappe öffnet, soll keine User-IDs nachschlagen müssen.
+
+
+@dataclass(frozen=True)
+class KaffeeZeile:
+    """Ein Logbucheintrag für den Export."""
+
+    ts: datetime
+    name: str
+    vorname: str
+    anzahl: int
+    abgerechnet: bool
+
+
+@dataclass(frozen=True)
+class ZahlungsZeile:
+    """Eine Zahlung für den Export."""
+
+    ts: datetime
+    name: str
+    vorname: str
+    typ: str
+    betrag: Decimal
+    betreff: str
+    invoice_id: Optional[int]
+
+
+@dataclass(frozen=True)
+class KontoZeile:
+    """Der Stand eines Kontos für den Export."""
+
+    name: str
+    vorname: str
+    mitglied: bool
+    status: Optional[str]
+    saldo: Decimal
+    offene_rechnungen: int
+    offener_betrag: Decimal
+    unabgerechnete_kaffees: int
+
+
+@dataclass(frozen=True)
+class Exportdaten:
+    """Alles, was in der Excel-Mappe steht."""
+
+    kaffees: List[KaffeeZeile]
+    zahlungen: List[ZahlungsZeile]
+    konten: List[KontoZeile]
+
+
+def _abgerechnete_monate(session) -> set:
+    """``{(user_id, jahr, monat)}`` aller Monate, für die es eine Rechnung gibt.
+
+    Egal ob bezahlt: Sobald eine Rechnung existiert, sind die Kaffees des
+    Monats verbucht und stecken im Saldo.
+    """
+    return {
+        (user_id, monat.year, monat.month)
+        for user_id, monat in session.execute(select(Invoice.user_id, Invoice.monat))
+    }
+
+
+def _offene_rechnungen_je_user(session) -> Dict[int, tuple]:
+    """``{user_id: (anzahl, summe)}`` der noch nicht bezahlten Rechnungen."""
+    stmt = (
+        select(
+            Invoice.user_id,
+            func.count(),
+            _summe(Invoice.gesamtbetrag),
+        )
+        .where(Invoice.bezahlt.is_(None))
+        .group_by(Invoice.user_id)
+    )
+    return {
+        user_id: (anzahl, betrag) for user_id, anzahl, betrag in session.execute(stmt)
+    }
+
+
+def get_exportdaten(session) -> Exportdaten:
+    """Alle Daten der App in der Form, in der sie in die Mappe wandern.
+
+    Die Kaffees werden ohnehin komplett geladen; welche davon noch in keiner
+    Rechnung stehen, wird deshalb hier in Python ausgezählt statt mit einer
+    zweiten Query je Person.
+    """
+    abgerechnet = _abgerechnete_monate(session)
+
+    kaffees = []
+    offene_kaffees: Dict[int, int] = {}
+    for user_id, name, vorname, ts, anzahl in session.execute(
+        select(Log.user_id, User.name, User.vorname, Log.ts, Log.anzahl)
+        .join(User, User.id == Log.user_id)
+        .order_by(Log.ts)
+    ):
+        ist_abgerechnet = (user_id, ts.year, ts.month) in abgerechnet
+        if not ist_abgerechnet:
+            offene_kaffees[user_id] = offene_kaffees.get(user_id, 0) + anzahl
+        kaffees.append(
+            KaffeeZeile(
+                ts=ts,
+                name=name,
+                vorname=vorname,
+                anzahl=anzahl,
+                abgerechnet=ist_abgerechnet,
+            )
+        )
+
+    zahlungen = [
+        ZahlungsZeile(
+            ts=ts,
+            name=name,
+            vorname=vorname,
+            typ=typ,
+            betrag=betrag,
+            betreff=betreff or "",
+            invoice_id=invoice_id,
+        )
+        for name, vorname, ts, typ, betrag, betreff, invoice_id in session.execute(
+            select(
+                User.name,
+                User.vorname,
+                Payment.ts,
+                Payment.typ,
+                Payment.betrag,
+                Payment.betreff,
+                Payment.invoice_id,
+            )
+            .join(User, User.id == Payment.user_id)
+            .order_by(Payment.ts)
+        )
+    ]
+
+    offene_rechnungen = _offene_rechnungen_je_user(session)
+    konten = []
+    for konto in get_user_konten(session):
+        anzahl_offen, betrag_offen = offene_rechnungen.get(konto.id, (0, NULL_BETRAG))
+        konten.append(
+            KontoZeile(
+                name=konto.name,
+                vorname=konto.vorname,
+                mitglied=konto.mitglied,
+                status=konto.status,
+                saldo=konto.saldo,
+                offene_rechnungen=anzahl_offen,
+                offener_betrag=betrag_offen,
+                unabgerechnete_kaffees=offene_kaffees.get(konto.id, 0),
+            )
+        )
+
+    return Exportdaten(
+        kaffees=kaffees,
+        zahlungen=zahlungen,
+        konten=konten,
+    )
+
+
+def get_exportumfang(session) -> Dict[str, int]:
+    """Zeilenzahl je Blatt – für die Anzeige, bevor die Mappe gebaut wird."""
+    return {
+        "kaffees": session.scalar(select(func.count()).select_from(Log)),
+        "zahlungen": session.scalar(select(func.count()).select_from(Payment)),
+        "konten": session.scalar(select(func.count()).select_from(User)),
+    }
